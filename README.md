@@ -1,5 +1,7 @@
 # TerminalG
 
+[![CI](https://github.com/randlee/terminalg/actions/workflows/ci.yml/badge.svg)](https://github.com/randlee/terminalg/actions/workflows/ci.yml)
+
 A GPU-accelerated terminal UI with integrated artifact viewing, built on Rust and GPUI.
 
 ---

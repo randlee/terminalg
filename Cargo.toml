@@ -5,6 +5,22 @@ edition = "2021"
 authors = ["Your Name"]
 description = "GPU-accelerated terminal UI with integrated artifact viewing and test execution"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/terminalg"
+keywords = ["terminal", "gpu", "ui", "gpui", "artifacts"]
+categories = ["command-line-utilities", "development-tools"]
+
+[lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[lints.clippy]
+# Lint groups set to lower priority so specific overrides work
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# Allow multiple crate versions - these come from transitive dependencies
+multiple_crate_versions = "allow"
 
 [dependencies]
 # UI Framework

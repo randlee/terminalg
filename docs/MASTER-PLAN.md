@@ -474,11 +474,16 @@ Phase 5 (Markdown Editor - Post-MVP)
 - ✅ Architecture documented
 - ⏳ Ready for GPUI bootstrap implementation
 
-**Session 3:** 2025-01-24 (~0.5 hours)
+**Session 3:** 2025-01-24 (~1 hour)
 - ✅ Claude skill for Rust development guidelines created
 - ✅ Microsoft's Pragmatic Rust Guidelines integrated (88KB, 2,437 lines)
 - ✅ Skill configured for automatic activation on Rust code
-- ✅ Committed and pushed to repository
+- ✅ Git-flow branching model initialized (main/develop)
+- ✅ Develop branch created and pushed to remote
+- ✅ Git workflow documentation added (docs/GIT-WORKFLOW.md)
+- ✅ Main branch protection enabled (PR required, no direct commits)
+- ✅ Branch protection verified and documented
+- ✅ All changes committed to develop branch
 
 ### In Progress
 
@@ -591,13 +596,15 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 
 ## 11. Development Workflow
 
+**Note:** This project uses **git-flow** branching model. See `docs/GIT-WORKFLOW.md` for complete details.
+
 ### Daily Workflow
 
 1. Pick next sprint or task from MASTER-PLAN.md
 2. Read sprint document (if exists) in `docs/sprints/`
-3. Create feature branch: `git checkout -b sprint/X-Y-name`
+3. Create feature branch: `git flow feature start sprint-X-Y-name`
 4. Implement and test locally
-5. Verify: `cargo check`, `cargo build`, `cargo test`
+5. Verify: `cargo check`, `cargo build`, `cargo test`, `cargo clippy`, `cargo fmt`
 6. Commit: `git commit -m "sprint X.Y: description"`
 7. Mark task complete in MASTER-PLAN.md
 8. Move to next task
@@ -606,17 +613,25 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 
 1. Verify all tasks checked
 2. Run quality gates
-3. Merge to main
-4. Update MASTER-PLAN.md status
-5. Commit status update
+3. Finish feature: `git flow feature finish sprint-X-Y-name`
+4. Push develop: `git push origin develop`
+5. Update MASTER-PLAN.md status on develop
+6. Commit status update to develop
 
 ### Phase Completion
 
-1. Verify all sprints complete
+1. Verify all sprints complete on develop
 2. Run phase checkpoint
-3. Create git tag
-4. Update documentation if needed
-5. Plan next phase
+3. Create release: `git flow release start 0.X.0` (bump version per phase)
+4. Update Cargo.toml version to `0.X.0`
+5. Update documentation if needed
+6. Commit: `git commit -am "chore: bump version to 0.X.0 for Phase X release"`
+7. Push release branch and create PR to main
+8. After PR merged: tag release on main (e.g., `v0.X.0`, `phase-X-complete`)
+9. Merge main back to develop
+10. Plan next phase
+
+**Version Strategy:** 0.1.0 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0 → 1.0.0 (when validated as usable)
 
 ---
 
@@ -624,25 +639,27 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 
 ### Aggressive Schedule (Full-Time)
 
-- **Phase 1:** 1.5-2 days (12-16 hours) - 70% done, 6-10 hours remaining
-- **Phase 2:** 2.5-4 days (20-30 hours)
-- **Phase 3:** 2-3 days (15-20 hours)
-- **Phase 4:** 2-3 days (15-20 hours) ← **MVP COMPLETE**
-- **Phase 5:** 1.5-2 days (10-15 hours) - Post-MVP
+- **Phase 1:** 1.5-2 days (12-16 hours) - 70% done, 6-10 hours remaining → **v0.1.0**
+- **Phase 2:** 2.5-4 days (20-30 hours) → **v0.2.0**
+- **Phase 3:** 2-3 days (15-20 hours) → **v0.3.0**
+- **Phase 4:** 2-3 days (15-20 hours) → **v0.4.0** ← MVP features complete
+- **Phase 5:** 1.5-2 days (10-15 hours) → **v0.5.0**
+- **v1.0.0:** When validated as usable (TBD)
 
-**Total (MVP):** 8-12 days full-time (Phases 1-4)
-**Total (with editing):** 9.5-14 days full-time (Phases 1-5)
+**Total (MVP features):** 8-12 days full-time (Phases 1-4) → v0.4.0
+**Total (with editing):** 9.5-14 days full-time (Phases 1-5) → v0.5.0
 
 ### Realistic Schedule (Part-Time)
 
-- **Phase 1:** 2-3 sessions - 70% done, 1-2 sessions remaining
-- **Phase 2:** 3-4 sessions
-- **Phase 3:** 2-3 sessions
-- **Phase 4:** 2-3 sessions ← **MVP COMPLETE**
-- **Phase 5:** 2-3 sessions - Post-MVP
+- **Phase 1:** 2-3 sessions - 70% done, 1-2 sessions remaining → **v0.1.0**
+- **Phase 2:** 3-4 sessions → **v0.2.0**
+- **Phase 3:** 2-3 sessions → **v0.3.0**
+- **Phase 4:** 2-3 sessions → **v0.4.0** ← MVP features complete
+- **Phase 5:** 2-3 sessions → **v0.5.0**
+- **v1.0.0:** When validated as usable (TBD)
 
-**Total (MVP):** 9-13 sessions (~2-3 weeks)
-**Total (with editing):** 11-16 sessions (~3-4 weeks)
+**Total (MVP features):** 9-13 sessions (~2-3 weeks) → v0.4.0
+**Total (with editing):** 11-16 sessions (~3-4 weeks) → v0.5.0
 
 ---
 
@@ -730,6 +747,7 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 - **Requirements:** `docs/REQUIREMENTS.md`
 - **Architecture:** `docs/ARCHITECTURE.md`
 - **This Document:** `docs/MASTER-PLAN.md`
+- **Git Workflow:** `docs/GIT-WORKFLOW.md`
 
 ### Supporting Documents
 

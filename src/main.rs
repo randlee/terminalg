@@ -1,4 +1,4 @@
-//! TerminalG - GPU-accelerated terminal with integrated artifact viewing
+//! `TerminalG` - GPU-accelerated terminal with integrated artifact viewing
 
 mod settings;
 mod terminal;
@@ -24,8 +24,7 @@ fn main() -> Result<()> {
 
     // Load theme
     let theme_name = &settings_store.settings().ui.theme;
-    let theme = theme::Theme::by_name(theme_name)
-        .unwrap_or_else(|| theme::Theme::dark());
+    let theme = theme::Theme::by_name(theme_name).unwrap_or_else(theme::Theme::dark);
     tracing::info!("Loaded theme: {}", theme.name);
 
     // TODO: Initialize GPUI app
