@@ -179,38 +179,72 @@ git push origin develop
 When all Phase 1 sprints are complete:
 
 ```bash
-# Create release branch
+# Create release branch from develop
 git flow release start phase-1-complete
 
 # Update documentation, version numbers
 git commit -am "chore: prepare Phase 1 release"
 
-# Finish release
-git flow release finish phase-1-complete
+# Push release branch to create PR
+git push origin release/phase-1-complete
 
-# Push everything
-git push origin main develop --tags
+# Create PR to main using GitHub CLI
+gh pr create --base main --head release/phase-1-complete \
+  --title "Release: Phase 1 Complete" \
+  --body "Phase 1 checkpoint release"
+
+# After PR is reviewed and merged:
+# 1. GitHub merges release branch to main
+# 2. Manually merge back to develop:
+git checkout develop
+git pull origin develop
+git merge main
+git push origin develop
+
+# Tag the release on main
+git checkout main
+git pull origin main
+git tag phase-1-complete
+git push origin --tags
+
+# Delete release branch
+git branch -d release/phase-1-complete
+git push origin --delete release/phase-1-complete
 ```
 
-This tags the Phase 1 checkpoint on `main`.
+**Note:** Since `main` is protected, we cannot use `git flow release finish` to push directly. Instead, we create a PR for the release branch.
 
 ---
 
-## Branch Protection (Recommended GitHub Settings)
+## Branch Protection (Configured)
 
-### `main` Branch Protection
+### `main` Branch Protection ✅ ACTIVE
 
-- ✅ Require pull request reviews
-- ✅ Require status checks to pass
-- ✅ Require branches to be up to date
-- ✅ Include administrators
-- ✅ Restrict who can push (only release/hotfix merges)
+**Status:** Configured and enforced via GitHub API
+
+Protection rules active:
+- ✅ **Require pull request reviews** (0 approvals required for solo dev)
+- ✅ **Dismiss stale reviews** when new commits pushed
+- ✅ **Enforce for administrators** (no exceptions)
+- ✅ **Block force pushes** (prevent history rewriting)
+- ✅ **Block deletions** (cannot delete main branch)
+- ❌ **No required status checks** (add CI/CD when ready)
+
+**Result:** All changes to `main` must go through pull requests. Direct commits are blocked for everyone, including admins.
+
+**To merge to main:**
+1. Create PR from `develop` or `release/*` branch
+2. Review and approve (or use "Squash and merge")
+3. PR merged automatically updates `main`
 
 ### `develop` Branch Protection
 
-- ✅ Require status checks to pass
-- ⚠️ Allow direct commits (for small fixes)
-- ✅ Require feature branches for major work
+**Status:** Not protected (allows direct commits)
+
+Recommended practices:
+- ⚠️ Allow direct commits for small fixes and documentation
+- ✅ Use feature branches for major work
+- ✅ Keep develop in working state (all commits should build)
 
 ---
 
