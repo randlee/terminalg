@@ -596,27 +596,97 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 
 ## 11. Development Workflow
 
-**Note:** This project uses **git-flow** branching model. See `docs/GIT-WORKFLOW.md` for complete details.
+**Note:** This project uses **git-flow** branching model and agent-driven development. See `docs/GIT-WORKFLOW.md` for complete details.
 
-### Daily Workflow
+### Agent-Driven Sprint Workflow
 
-1. Pick next sprint or task from MASTER-PLAN.md
-2. Read sprint document (if exists) in `docs/sprints/`
-3. Create feature branch: `git flow feature start sprint-X-Y-name`
-4. Implement and test locally
-5. Verify: `cargo check`, `cargo build`, `cargo test`, `cargo clippy`, `cargo fmt`
-6. Commit: `git commit -m "sprint X.Y: description"`
-7. Mark task complete in MASTER-PLAN.md
-8. Move to next task
+This project uses 5 specialized Rust agents to ensure quality and consistency:
 
-### Sprint Completion
+**Available Agents:**
+- **rust-architect** - Creates detailed architecture designs and implementation blueprints
+- **rust-code-explorer** - Analyzes existing codebase to understand patterns and conventions
+- **rust-developer** - Implements code changes following guidelines
+- **rust-code-reviewer** - Reviews code for guideline compliance (confidence ≥80%)
+- **rust-qa-agent** - Validates tests pass and coverage is adequate
 
-1. Verify all tasks checked
-2. Run quality gates
-3. Finish feature: `git flow feature finish sprint-X-Y-name`
-4. Push develop: `git push origin develop`
-5. Update MASTER-PLAN.md status on develop
-6. Commit status update to develop
+**Agent Registry:** `.claude/agents/registry.yaml`
+**Agent Specs:** `.claude/agents/*.md`
+
+### Sprint Start Workflow
+
+**Before writing any code:**
+
+1. **Analyze Context** (if needed)
+   - Invoke `rust-code-explorer` to understand relevant existing features
+   - Document findings for architecture phase
+
+2. **Design Architecture** (required)
+   - Invoke `rust-architect` to create detailed design/implementation blueprint
+   - Architect reads guidelines, analyzes codebase patterns, makes decisions
+   - Output saved as: `docs/sprints/phase-X-sprint-Y-design.md`
+   - Blueprint includes: component design, file changes, data flow, build sequence
+
+3. **Create Feature Branch**
+   - `git flow feature start sprint-X-Y-name`
+   - Begin implementation following architecture blueprint
+
+### During Sprint (Development)
+
+1. Pick next task from sprint checklist or architecture blueprint
+2. Implement using `rust-developer` agent or manual development
+3. Follow architecture design and Rust guidelines
+4. Write tests for all new code (required)
+5. Verify locally: `cargo check`, `cargo build`, `cargo test`, `cargo clippy`, `cargo fmt`
+6. Commit frequently: `git commit -m "sprint X.Y: description"`
+
+### Sprint Completion (Quality Gates)
+
+**All gates must pass before sprint can be marked complete:**
+
+#### Gate 1: Parallel Review & QA ⚠️ BLOCKING
+
+Run these two agents **IN PARALLEL** - both must pass:
+
+**A. Code Review (`rust-code-reviewer`)**
+- Reviews all changes from sprint (git diff)
+- Checks compliance with Rust guidelines
+- Reports only high-confidence issues (≥80% confidence)
+- **BLOCKING:** All issues must be fixed or triaged
+  - Fix immediately: Most issues
+  - Create follow-up sprint: Serious architectural issues
+- Output: `docs/sprints/phase-X-sprint-Y-review.md`
+
+**B. QA Validation (`rust-qa-agent`)**
+- Runs complete test suite: `cargo test` (debug + release)
+- Generates coverage report using `cargo-llvm-cov`
+- Verifies coverage is adequate (guideline: 80%, quality > metrics)
+- Checks test quality (no empty tests, no ignored tests)
+- **BLOCKING:** 100% tests must pass, test quality acceptable
+- Output: `docs/sprints/phase-X-sprint-Y-qa.md`
+
+**Critical Rules:**
+- ❌ Cannot disable tests without explicit user permission
+- ❌ Cannot modify tests to pass without explicit user permission
+- ❌ Cannot proceed if any tests fail (100% must pass)
+- ⚠️ Coverage guideline: 80% (quality matters more than hitting exact numbers)
+- ✅ Review issues must be fixed or triaged (serious → follow-up sprint)
+- ✅ QA must confirm adequate test coverage for code criticality
+
+#### Gate 2: Final Verification
+
+1. All review issues resolved or triaged
+2. All tests passing (100%)
+3. Coverage adequate (threshold met)
+4. Code formatted (`cargo fmt`)
+5. No clippy warnings (`cargo clippy -- -D warnings`)
+
+#### Gate 3: Merge & Update
+
+1. Finish feature: `git flow feature finish sprint-X-Y-name`
+2. Push develop: `git push origin develop`
+3. Update MASTER-PLAN.md status on develop (mark sprint complete)
+4. Commit sprint completion: `git commit -m "docs: mark sprint X.Y complete"`
+5. Push: `git push origin develop`
 
 ### Phase Completion
 
@@ -635,7 +705,82 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 
 ---
 
-## 12. Timeline Estimates
+## 12. Agent Specifications
+
+This project uses 5 specialized Rust agents for quality-driven development:
+
+### rust-architect (Design Phase)
+**Purpose:** Creates detailed architecture designs and implementation blueprints
+**When:** Before each sprint, after understanding requirements
+**Reads:** Rust guidelines, GPUI guidelines, existing codebase patterns
+**Outputs:** Complete implementation blueprint with:
+- Pattern analysis from existing code
+- Architecture decisions with rationale
+- Component design (files, responsibilities, interfaces)
+- Implementation map (specific files to create/modify)
+- Data flow diagrams
+- Build sequence (phased checklist)
+
+**Location:** `.claude/agents/rust-architect.md`
+
+### rust-code-explorer (Analysis Phase)
+**Purpose:** Deeply analyzes existing features to understand patterns
+**When:** Before architecture phase, when learning existing code
+**Reads:** Rust guidelines, GPUI guidelines
+**Outputs:** Feature analysis with:
+- Entry points and core files
+- Code flow tracing
+- Architecture layers and patterns
+- Dependencies and integrations
+- Key insights for new development
+
+**Location:** `.claude/agents/rust-code-explorer.md`
+
+### rust-developer (Implementation Phase)
+**Purpose:** Implements code changes following guidelines and architecture
+**When:** During sprint, following architecture blueprint
+**Reads:** Rust guidelines, GPUI guidelines, architecture design
+**Outputs:** Code implementation with:
+- Changes summary
+- Files modified/created
+- Assumptions made
+- Follow-up suggestions
+
+**Location:** `.claude/agents/rust-developer.md`
+
+### rust-code-reviewer (Review Phase)
+**Purpose:** Reviews code for guideline compliance and quality issues
+**When:** Sprint completion (parallel with QA)
+**Reads:** Rust guidelines, GPUI guidelines
+**Reviews:** Git diff from sprint changes
+**Outputs:** Review report with:
+- High-confidence issues only (≥80% confidence)
+- Severity: Critical vs Important
+- Specific file:line references
+- Guideline violations
+- Concrete fix suggestions
+
+**Location:** `.claude/agents/rust-code-reviewer.md`
+
+### rust-qa-agent (Quality Assurance Phase)
+**Purpose:** Validates tests pass and coverage is adequate
+**When:** Sprint completion (parallel with code review)
+**Does NOT read:** Guidelines (focuses on testing, not design)
+**Outputs:** QA report with:
+- Test results (100% must pass)
+- Coverage analysis (80% guideline)
+- Test quality assessment
+- Performance metrics
+- Sprint gate: PASS or FAIL with blocking issues
+
+**Location:** `.claude/agents/rust-qa-agent.md`
+
+### Agent Registry
+All agents registered in: `.claude/agents/registry.yaml`
+
+---
+
+## 13. Timeline Estimates
 
 ### Aggressive Schedule (Full-Time)
 

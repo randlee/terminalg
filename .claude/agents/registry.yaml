@@ -11,6 +11,9 @@ agents:
   rust-developer:
     version: 1.0.0
     path: .claude/agents/rust-developer.md
+  rust-qa-agent:
+    version: 1.0.0
+    path: .claude/agents/rust-qa-agent.md
 
 skills:
   rust-development:
@@ -19,3 +22,4 @@ skills:
       rust-code-reviewer: "1.x"
       rust-code-explorer: "1.x"
       rust-developer: "1.x"
+      rust-qa-agent: "1.x"
