@@ -290,8 +290,8 @@ mod tests {
     fn test_settings_store_settings_immutable_access() {
         let temp_dir = setup_test_config_dir();
         let settings_path = temp_dir.path().join("settings.json");
-        let store = SettingsStore::new_with_path(settings_path)
-            .expect("Failed to create settings store");
+        let store =
+            SettingsStore::new_with_path(settings_path).expect("Failed to create settings store");
 
         // Get immutable reference
         let settings = store.settings();
@@ -305,8 +305,8 @@ mod tests {
     fn test_settings_store_settings_mutable_access() {
         let temp_dir = setup_test_config_dir();
         let settings_path = temp_dir.path().join("settings.json");
-        let mut store = SettingsStore::new_with_path(settings_path)
-            .expect("Failed to create settings store");
+        let mut store =
+            SettingsStore::new_with_path(settings_path).expect("Failed to create settings store");
 
         // Save original font size
         let original_font_size = store.settings().terminal.font_size;
