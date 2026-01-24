@@ -60,6 +60,23 @@ impl SettingsStore {
         })
     }
 
+    /// Create new settings store with a custom settings path (for testing)
+    #[cfg(test)]
+    fn new_with_path(settings_path: PathBuf) -> Result<Self> {
+        let settings = if settings_path.exists() {
+            Self::load_from_file(&settings_path)?
+        } else {
+            let defaults = Settings::default();
+            defaults.save(&settings_path)?;
+            defaults
+        };
+
+        Ok(Self {
+            settings,
+            settings_path,
+        })
+    }
+
     /// Get config directory (platform-specific)
     fn get_config_dir() -> Result<PathBuf> {
         dirs::config_dir()
@@ -271,7 +288,10 @@ mod tests {
 
     #[test]
     fn test_settings_store_settings_immutable_access() {
-        let store = SettingsStore::new().expect("Failed to create settings store");
+        let temp_dir = setup_test_config_dir();
+        let settings_path = temp_dir.path().join("settings.json");
+        let store = SettingsStore::new_with_path(settings_path)
+            .expect("Failed to create settings store");
 
         // Get immutable reference
         let settings = store.settings();
@@ -283,7 +303,10 @@ mod tests {
 
     #[test]
     fn test_settings_store_settings_mutable_access() {
-        let mut store = SettingsStore::new().expect("Failed to create settings store");
+        let temp_dir = setup_test_config_dir();
+        let settings_path = temp_dir.path().join("settings.json");
+        let mut store = SettingsStore::new_with_path(settings_path)
+            .expect("Failed to create settings store");
 
         // Save original font size
         let original_font_size = store.settings().terminal.font_size;
@@ -297,7 +320,7 @@ mod tests {
         // Verify the change
         assert_eq!(store.settings().terminal.font_size, 20);
 
-        // Restore original
+        // Restore original (not needed with temp dir, but keeps test intent clear)
         store.settings_mut().terminal.font_size = original_font_size;
     }
 }
