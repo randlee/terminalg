@@ -27,3 +27,8 @@ target
 
 # Temporary/archived documentation
 temp/
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
