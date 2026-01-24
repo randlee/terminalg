@@ -1,0 +1,54 @@
+[package]
+name = "terminalg"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name"]
+description = "GPU-accelerated terminal UI with integrated artifact viewing and test execution"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# UI Framework
+# Note: gpui not yet published to crates.io, will be extracted from Zed repo in Phase 1.5
+# gpui = { git = "https://github.com/zed-industries/zed", branch = "main" }
+
+# Terminal (Phase 2)
+# alacritty_terminal = "0.12"
+# pty = "0.2"
+
+# Async
+# smol = "2"
+# futures = "0.3"
+
+# Configuration & Settings
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dirs = "5.0"
+notify = "6.0"
+
+# Error handling & logging
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Markdown & Text (Phase 3)
+# pulldown-cmark = "0.9"
+# rope = "0.1"
+
+# Image support (Phase 3)
+# image = { version = "0.24", features = ["tiff"] }
+
+# Platform-specific (Phase 2 - PTY management)
+# [target.'cfg(unix)'.dependencies]
+# libc = "0.2"
+
+# [target.'cfg(windows)'.dependencies]
+# windows = { version = "0.51", features = ["Win32_System_Console"] }
+
+[dev-dependencies]
+tempfile = "3.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
