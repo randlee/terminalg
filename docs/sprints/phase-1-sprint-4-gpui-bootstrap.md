@@ -10,7 +10,7 @@
 ## Pre-Implementation Review
 
 **Read these first:**
-- [ ] Review `docs/GPUI-INTEGRATION-ARCHITECTURE.md` (Sections 1-3)
+- [ ] Review `docs/architecture/gpui-integration.md` (Sections 1-3)
 - [ ] Study Zed's `src/main.rs`: https://github.com/zed-industries/zed/blob/v0.220.3/src/main.rs
 - [ ] Skim GPUI examples: https://github.com/zed-industries/zed/tree/v0.220.3/crates/gpui/examples
 
@@ -173,7 +173,7 @@ cargo build
 
 **Expected output:**
 ```
-Compiling terminalg v0.1.0 (/Users/.../terminalg)
+Compiling terminalg v0.1.0 (terminalg)
 Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.34s
 ```
 
@@ -198,7 +198,7 @@ cargo run
 
 **Check logs:**
 ```
-INFO terminalg: Loaded settings from: /Users/.../.config/terminalg/settings.json
+INFO terminalg: Loaded settings from: ~/.config/terminalg/settings.json
 INFO terminalg: Loaded theme: dark
 ```
 
