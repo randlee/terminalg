@@ -474,11 +474,14 @@ Phase 5 (Markdown Editor - Post-MVP)
 - ✅ Architecture documented
 - ⏳ Ready for GPUI bootstrap implementation
 
-**Session 3:** 2025-01-24 (~0.5 hours)
+**Session 3:** 2025-01-24 (~0.75 hours)
 - ✅ Claude skill for Rust development guidelines created
 - ✅ Microsoft's Pragmatic Rust Guidelines integrated (88KB, 2,437 lines)
 - ✅ Skill configured for automatic activation on Rust code
-- ✅ Committed and pushed to repository
+- ✅ Git-flow branching model initialized (main/develop)
+- ✅ Develop branch created and pushed to remote
+- ✅ Git workflow documentation added (docs/GIT-WORKFLOW.md)
+- ✅ All changes committed to develop branch
 
 ### In Progress
 
@@ -591,13 +594,15 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 
 ## 11. Development Workflow
 
+**Note:** This project uses **git-flow** branching model. See `docs/GIT-WORKFLOW.md` for complete details.
+
 ### Daily Workflow
 
 1. Pick next sprint or task from MASTER-PLAN.md
 2. Read sprint document (if exists) in `docs/sprints/`
-3. Create feature branch: `git checkout -b sprint/X-Y-name`
+3. Create feature branch: `git flow feature start sprint-X-Y-name`
 4. Implement and test locally
-5. Verify: `cargo check`, `cargo build`, `cargo test`
+5. Verify: `cargo check`, `cargo build`, `cargo test`, `cargo clippy`, `cargo fmt`
 6. Commit: `git commit -m "sprint X.Y: description"`
 7. Mark task complete in MASTER-PLAN.md
 8. Move to next task
@@ -606,17 +611,20 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 
 1. Verify all tasks checked
 2. Run quality gates
-3. Merge to main
-4. Update MASTER-PLAN.md status
-5. Commit status update
+3. Finish feature: `git flow feature finish sprint-X-Y-name`
+4. Push develop: `git push origin develop`
+5. Update MASTER-PLAN.md status on develop
+6. Commit status update to develop
 
 ### Phase Completion
 
-1. Verify all sprints complete
+1. Verify all sprints complete on develop
 2. Run phase checkpoint
-3. Create git tag
+3. Create release: `git flow release start phase-X-complete`
 4. Update documentation if needed
-5. Plan next phase
+5. Finish release: `git flow release finish phase-X-complete`
+6. Push all: `git push origin main develop --tags`
+7. Plan next phase
 
 ---
 
@@ -730,6 +738,7 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 - **Requirements:** `docs/REQUIREMENTS.md`
 - **Architecture:** `docs/ARCHITECTURE.md`
 - **This Document:** `docs/MASTER-PLAN.md`
+- **Git Workflow:** `docs/GIT-WORKFLOW.md`
 
 ### Supporting Documents
 
