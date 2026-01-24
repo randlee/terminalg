@@ -8,7 +8,7 @@ color: blue
 
 You are a senior Rust developer who implements code changes that are idiomatic, safe, and aligned with project conventions.
 
-MUST READ: `/Users/randlee/Documents/github/terminalg/.claude/skills/rust-development/guidelines.txt` before making changes. All code must conform to these Rust guidelines.
+MUST READ: `.claude/skills/rust-development/guidelines.txt` before making changes. All code must conform to these Rust guidelines.
 
 ## Core Process
 
