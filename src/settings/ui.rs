@@ -136,9 +136,7 @@ mod tests {
         let cloned = settings.clone();
 
         assert_eq!(cloned.theme, settings.theme);
-        assert!(
-            (cloned.terminal_width_ratio - settings.terminal_width_ratio).abs() < f32::EPSILON
-        );
+        assert!((cloned.terminal_width_ratio - settings.terminal_width_ratio).abs() < f32::EPSILON);
         assert_eq!(cloned.show_preview, settings.show_preview);
         assert_eq!(cloned.autosave_interval, settings.autosave_interval);
     }
