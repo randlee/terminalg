@@ -622,11 +622,16 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 
 1. Verify all sprints complete on develop
 2. Run phase checkpoint
-3. Create release: `git flow release start phase-X-complete`
-4. Update documentation if needed
-5. Finish release: `git flow release finish phase-X-complete`
-6. Push all: `git push origin main develop --tags`
-7. Plan next phase
+3. Create release: `git flow release start 0.X.0` (bump version per phase)
+4. Update Cargo.toml version to `0.X.0`
+5. Update documentation if needed
+6. Commit: `git commit -am "chore: bump version to 0.X.0 for Phase X release"`
+7. Push release branch and create PR to main
+8. After PR merged: tag release on main (e.g., `v0.X.0`, `phase-X-complete`)
+9. Merge main back to develop
+10. Plan next phase
+
+**Version Strategy:** 0.1.0 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0 → 1.0.0 (when validated as usable)
 
 ---
 
@@ -634,25 +639,27 @@ Each sprint document (in `docs/sprints/`) follows this structure:
 
 ### Aggressive Schedule (Full-Time)
 
-- **Phase 1:** 1.5-2 days (12-16 hours) - 70% done, 6-10 hours remaining
-- **Phase 2:** 2.5-4 days (20-30 hours)
-- **Phase 3:** 2-3 days (15-20 hours)
-- **Phase 4:** 2-3 days (15-20 hours) ← **MVP COMPLETE**
-- **Phase 5:** 1.5-2 days (10-15 hours) - Post-MVP
+- **Phase 1:** 1.5-2 days (12-16 hours) - 70% done, 6-10 hours remaining → **v0.1.0**
+- **Phase 2:** 2.5-4 days (20-30 hours) → **v0.2.0**
+- **Phase 3:** 2-3 days (15-20 hours) → **v0.3.0**
+- **Phase 4:** 2-3 days (15-20 hours) → **v0.4.0** ← MVP features complete
+- **Phase 5:** 1.5-2 days (10-15 hours) → **v0.5.0**
+- **v1.0.0:** When validated as usable (TBD)
 
-**Total (MVP):** 8-12 days full-time (Phases 1-4)
-**Total (with editing):** 9.5-14 days full-time (Phases 1-5)
+**Total (MVP features):** 8-12 days full-time (Phases 1-4) → v0.4.0
+**Total (with editing):** 9.5-14 days full-time (Phases 1-5) → v0.5.0
 
 ### Realistic Schedule (Part-Time)
 
-- **Phase 1:** 2-3 sessions - 70% done, 1-2 sessions remaining
-- **Phase 2:** 3-4 sessions
-- **Phase 3:** 2-3 sessions
-- **Phase 4:** 2-3 sessions ← **MVP COMPLETE**
-- **Phase 5:** 2-3 sessions - Post-MVP
+- **Phase 1:** 2-3 sessions - 70% done, 1-2 sessions remaining → **v0.1.0**
+- **Phase 2:** 3-4 sessions → **v0.2.0**
+- **Phase 3:** 2-3 sessions → **v0.3.0**
+- **Phase 4:** 2-3 sessions → **v0.4.0** ← MVP features complete
+- **Phase 5:** 2-3 sessions → **v0.5.0**
+- **v1.0.0:** When validated as usable (TBD)
 
-**Total (MVP):** 9-13 sessions (~2-3 weeks)
-**Total (with editing):** 11-16 sessions (~3-4 weeks)
+**Total (MVP features):** 9-13 sessions (~2-3 weeks) → v0.4.0
+**Total (with editing):** 11-16 sessions (~3-4 weeks) → v0.5.0
 
 ---
 

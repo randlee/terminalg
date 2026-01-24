@@ -280,19 +280,34 @@ git flow support start <version> <base> # Create support branch from tag
 
 ## Version Tagging Strategy
 
-### Semantic Versioning (SemVer)
+### Current Strategy: Pre-1.0 Development
 
-Format: `MAJOR.MINOR.PATCH`
+**Version 1.0.0 reserved for when app is determined to be truly usable.**
 
-- **MAJOR:** Incompatible API changes
-- **MINOR:** Add functionality (backwards-compatible)
+Format: `0.MINOR.PATCH` (pre-release development)
+
+**Phase-to-Version Mapping:**
+- `0.1.0` - Phase 1 complete (Foundation & Workspace) ← Current
+- `0.2.0` - Phase 2 complete (Zed Terminal Integration)
+- `0.3.0` - Phase 3 complete (File/Folder Browser)
+- `0.4.0` - Phase 4 complete (Markdown Viewer - MVP features done)
+- `0.5.0` - Phase 5 complete (Markdown Editor)
+- `1.0.0` - **Usability validated** (when determined ready by maintainer)
+
+**Patch versions (0.x.y):**
+- Use for hotfixes and minor improvements between phases
+- Example: `0.1.1` for bug fixes during Phase 1
+
+**Git Tags:**
+- Version tags: `v0.1.0`, `v0.2.0`, etc. (match Cargo.toml version)
+- Phase milestone tags: `phase-1-complete`, `phase-2-complete` (descriptive)
+- Both tag types can coexist
+
+**Semantic Versioning after 1.0:**
+- `MAJOR.MINOR.PATCH` format (standard SemVer)
+- **MAJOR:** Breaking changes
+- **MINOR:** New features (backwards-compatible)
 - **PATCH:** Bug fixes (backwards-compatible)
-
-### Phase-Based Tags
-
-- Phase milestones: `phase-1-complete`, `phase-2-complete`, etc.
-- MVP milestone: `mvp-1.0.0`
-- Post-MVP: `1.1.0`, `1.2.0`, etc.
 
 ---
 
