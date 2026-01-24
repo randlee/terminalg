@@ -26,8 +26,8 @@ pub struct Settings {
 impl Settings {
     /// Save settings to file
     pub fn save(&self, path: &PathBuf) -> Result<()> {
-        let content = serde_json::to_string_pretty(&self)
-            .context("Failed to serialize settings")?;
+        let content =
+            serde_json::to_string_pretty(&self).context("Failed to serialize settings")?;
         fs::write(path, content)
             .with_context(|| format!("Failed to write settings to {}", path.display()))?;
         tracing::info!("Settings saved to {}", path.display());
@@ -70,8 +70,7 @@ impl SettingsStore {
     /// Get full settings file path
     fn get_settings_path() -> Result<PathBuf> {
         let config_dir = Self::get_config_dir()?;
-        fs::create_dir_all(&config_dir)
-            .context("Failed to create config directory")?;
+        fs::create_dir_all(&config_dir).context("Failed to create config directory")?;
         Ok(config_dir.join("settings.json"))
     }
 
@@ -79,8 +78,8 @@ impl SettingsStore {
     fn load_from_file(path: &PathBuf) -> Result<Settings> {
         let content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read settings from {}", path.display()))?;
-        let settings: Settings = serde_json::from_str(&content)
-            .context("Failed to parse settings.json")?;
+        let settings: Settings =
+            serde_json::from_str(&content).context("Failed to parse settings.json")?;
         Ok(settings)
     }
 
@@ -98,10 +97,14 @@ impl SettingsStore {
     /// Save settings to file
     #[allow(dead_code)] // Part of public API, will be used in future phases
     pub fn save(&self) -> Result<()> {
-        let content = serde_json::to_string_pretty(&self.settings)
-            .context("Failed to serialize settings")?;
-        fs::write(&self.settings_path, content)
-            .with_context(|| format!("Failed to write settings to {}", self.settings_path.display()))?;
+        let content =
+            serde_json::to_string_pretty(&self.settings).context("Failed to serialize settings")?;
+        fs::write(&self.settings_path, content).with_context(|| {
+            format!(
+                "Failed to write settings to {}",
+                self.settings_path.display()
+            )
+        })?;
         tracing::info!("Settings saved to {}", self.settings_path.display());
         Ok(())
     }
@@ -146,7 +149,7 @@ mod tests {
 
         // Verify UI defaults
         assert_eq!(settings.ui.theme, "dark");
-        assert_eq!(settings.ui.terminal_width_ratio, 0.5);
+        assert!((settings.ui.terminal_width_ratio - 0.5).abs() < f32::EPSILON);
         assert!(settings.ui.show_preview);
         assert_eq!(settings.ui.autosave_interval, 0);
     }
@@ -158,14 +161,16 @@ mod tests {
 
         // Create and save settings
         let settings = Settings::default();
-        settings.save(&settings_path).expect("Failed to save settings");
+        settings
+            .save(&settings_path)
+            .expect("Failed to save settings");
 
         // Verify file exists
         assert!(settings_path.exists());
 
         // Load settings back
-        let loaded = SettingsStore::load_from_file(&settings_path)
-            .expect("Failed to load settings");
+        let loaded =
+            SettingsStore::load_from_file(&settings_path).expect("Failed to load settings");
 
         // Verify loaded settings match defaults
         assert_eq!(loaded.terminal.font_size, settings.terminal.font_size);
@@ -177,12 +182,11 @@ mod tests {
         let settings = Settings::default();
 
         // Serialize to JSON
-        let json = serde_json::to_string(&settings)
-            .expect("Failed to serialize settings");
+        let json = serde_json::to_string(&settings).expect("Failed to serialize settings");
 
         // Deserialize back
-        let deserialized: Settings = serde_json::from_str(&json)
-            .expect("Failed to deserialize settings");
+        let deserialized: Settings =
+            serde_json::from_str(&json).expect("Failed to deserialize settings");
 
         // Verify round-trip
         assert_eq!(deserialized.terminal.font_size, settings.terminal.font_size);
@@ -228,8 +232,7 @@ mod tests {
 
     #[test]
     fn test_settings_store_get_config_dir_returns_path() {
-        let config_dir = SettingsStore::get_config_dir()
-            .expect("Failed to get config directory");
+        let config_dir = SettingsStore::get_config_dir().expect("Failed to get config directory");
 
         // Verify path ends with "terminalg"
         assert!(config_dir.to_string_lossy().ends_with("terminalg"));
@@ -237,8 +240,8 @@ mod tests {
 
     #[test]
     fn test_settings_store_get_settings_path_creates_dir() {
-        let settings_path = SettingsStore::get_settings_path()
-            .expect("Failed to get settings path");
+        let settings_path =
+            SettingsStore::get_settings_path().expect("Failed to get settings path");
 
         // Verify path exists and points to settings.json
         assert!(settings_path.parent().unwrap().exists());
@@ -273,14 +276,17 @@ mod tests {
         // Get immutable reference
         let settings = store.settings();
 
-        // Verify we can read values
-        let _font_size = settings.terminal.font_size;
-        let _theme = &settings.ui.theme;
+        // Verify we can read values (no modification)
+        assert!(settings.terminal.font_size > 0);
+        assert!(!settings.ui.theme.is_empty());
     }
 
     #[test]
     fn test_settings_store_settings_mutable_access() {
         let mut store = SettingsStore::new().expect("Failed to create settings store");
+
+        // Save original font size
+        let original_font_size = store.settings().terminal.font_size;
 
         // Get mutable reference
         let settings_mut = store.settings_mut();
@@ -290,5 +296,8 @@ mod tests {
 
         // Verify the change
         assert_eq!(store.settings().terminal.font_size, 20);
+
+        // Restore original
+        store.settings_mut().terminal.font_size = original_font_size;
     }
 }

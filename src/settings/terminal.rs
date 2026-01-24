@@ -68,8 +68,7 @@ mod tests {
         let settings = TerminalSettings::default();
 
         // Serialize to JSON
-        let json = serde_json::to_string(&settings)
-            .expect("Failed to serialize TerminalSettings");
+        let json = serde_json::to_string(&settings).expect("Failed to serialize TerminalSettings");
 
         // Verify JSON contains expected keys
         assert!(json.contains("font_size"));
@@ -79,15 +78,18 @@ mod tests {
         assert!(json.contains("scrollback_lines"));
 
         // Deserialize back
-        let deserialized: TerminalSettings = serde_json::from_str(&json)
-            .expect("Failed to deserialize TerminalSettings");
+        let deserialized: TerminalSettings =
+            serde_json::from_str(&json).expect("Failed to deserialize TerminalSettings");
 
         // Verify round-trip
         assert_eq!(deserialized.font_size, settings.font_size);
         assert_eq!(deserialized.font_family, settings.font_family);
         assert_eq!(deserialized.padding.horizontal, settings.padding.horizontal);
         assert_eq!(deserialized.padding.vertical, settings.padding.vertical);
-        assert_eq!(deserialized.enable_url_recognition, settings.enable_url_recognition);
+        assert_eq!(
+            deserialized.enable_url_recognition,
+            settings.enable_url_recognition
+        );
         assert_eq!(deserialized.scrollback_lines, settings.scrollback_lines);
     }
 
@@ -105,8 +107,8 @@ mod tests {
             "shell": "/bin/bash"
         }"#;
 
-        let settings: TerminalSettings = serde_json::from_str(json)
-            .expect("Failed to deserialize JSON");
+        let settings: TerminalSettings =
+            serde_json::from_str(json).expect("Failed to deserialize JSON");
 
         assert_eq!(settings.font_size, 14);
         assert_eq!(settings.font_family, "Monaco");
@@ -147,11 +149,10 @@ mod tests {
             vertical: 10,
         };
 
-        let json = serde_json::to_string(&padding)
-            .expect("Failed to serialize Padding");
+        let json = serde_json::to_string(&padding).expect("Failed to serialize Padding");
 
-        let deserialized: Padding = serde_json::from_str(&json)
-            .expect("Failed to deserialize Padding");
+        let deserialized: Padding =
+            serde_json::from_str(&json).expect("Failed to deserialize Padding");
 
         assert_eq!(deserialized.horizontal, padding.horizontal);
         assert_eq!(deserialized.vertical, padding.vertical);
@@ -171,8 +172,8 @@ mod tests {
             "scrollback_lines": 10000
         }"#;
 
-        let settings: TerminalSettings = serde_json::from_str(json)
-            .expect("Failed to deserialize JSON without shell field");
+        let settings: TerminalSettings =
+            serde_json::from_str(json).expect("Failed to deserialize JSON without shell field");
 
         assert!(settings.shell.is_none());
     }

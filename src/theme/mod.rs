@@ -154,11 +154,9 @@ mod tests {
     fn test_color_serialization() {
         let color = Color::new(100, 150, 200);
 
-        let json = serde_json::to_string(&color)
-            .expect("Failed to serialize Color");
+        let json = serde_json::to_string(&color).expect("Failed to serialize Color");
 
-        let deserialized: Color = serde_json::from_str(&json)
-            .expect("Failed to deserialize Color");
+        let deserialized: Color = serde_json::from_str(&json).expect("Failed to deserialize Color");
 
         assert_eq!(deserialized.r, color.r);
         assert_eq!(deserialized.g, color.g);
@@ -290,11 +288,9 @@ mod tests {
     fn test_theme_serialization() {
         let theme = Theme::dark();
 
-        let json = serde_json::to_string(&theme)
-            .expect("Failed to serialize Theme");
+        let json = serde_json::to_string(&theme).expect("Failed to serialize Theme");
 
-        let deserialized: Theme = serde_json::from_str(&json)
-            .expect("Failed to deserialize Theme");
+        let deserialized: Theme = serde_json::from_str(&json).expect("Failed to deserialize Theme");
 
         assert_eq!(deserialized.name, theme.name);
         assert_eq!(deserialized.foreground.r, theme.foreground.r);
