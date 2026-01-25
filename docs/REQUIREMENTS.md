@@ -32,7 +32,7 @@ Existing tools force workflows into constrained patterns:
 - **Hide/show any pane** with single button click
 - **Integrated viewers** - Markdown, images (no browser needed)
 - **URL recognition and clicking** in terminal output
-- **Workspace configuration** - Repo-local config per workspace (typically committed)
+- **Workspace configuration** - Repo-local config per workspace (user decides whether to commit)
 - **Real-time test execution** visualization
 
 ---
@@ -68,7 +68,7 @@ Existing tools force workflows into constrained patterns:
 - [ ] Terminal pane: Multiple terminals with tabs at bottom
 - [ ] Document viewer pane: Multiple documents with tabs at bottom
 - [ ] Resizable pane dividers (drag to adjust)
-- [ ] Default visibility (first workspace): File browser + Terminal (rooted at same folder)
+- [ ] Default visibility (first workspace): File browser + Terminal (rooted at the workspace folder)
 - [ ] Subsequent visibility: Restore from workspace config
 - [ ] Status bar
 
@@ -93,9 +93,11 @@ Existing tools force workflows into constrained patterns:
 - [ ] Auto-save on change
 
 *Workspace configuration:*
-- [ ] Separate config file per workspace (repo-local, typically committed)
+- [ ] Separate config file per workspace (repo-local, user decides whether to commit)
 - [ ] Auto-save workspace state (open terminals, documents, pane sizes, visibility)
 - [ ] Workspace-local: `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` in project repos
+- [ ] Workspace root is the folder containing `.terminalg/`
+- [ ] Loading/switching workspaces sets the process working directory to the workspace root
 - [ ] First-time workspace: Default to file browser + terminal (same root folder)
 - [ ] App settings track all available workspaces and their config paths for this machine
 
