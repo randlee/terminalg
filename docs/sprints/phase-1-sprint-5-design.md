@@ -102,6 +102,11 @@ TerminalGApp
 - **View state:** `WorkspaceView` struct holds workspace config
 - **No new globals needed** - workspace config in view state
 
+### 4.3 Settings Locations
+
+- **User settings:** `~/.config/terminalg/settings.json`
+- **Workspace settings:** `.terminalg/workspaces.json` (repo-local)
+
 ---
 
 ## 5. Data Structures
@@ -286,7 +291,7 @@ impl Render for WorkspaceView {
 - [ ] Implement `WorkspaceConfig` struct with serde
 - [ ] Implement `WorkspacesConfig` struct with defaults
 - [ ] Implement `WorkspaceConfigStore` with load/save
-- [ ] Use platform-specific paths (match settings pattern)
+- [ ] Use repo-local path: `.terminalg/workspaces.json`
 - [ ] Add unit tests for config serialization
 
 **Test checkpoint:**
@@ -595,7 +600,7 @@ mod tests {
 - [ ] Click "Hide" on terminal (middle pane) works
 - [ ] Switch workspace shows different visibility
 - [ ] Close and reopen app - state persists
-- [ ] Check workspaces.json created in config dir
+- [ ] Check `.terminalg/workspaces.json` created in repo root
 - [ ] No crashes during normal usage
 - [ ] Console shows appropriate log messages
 
@@ -607,7 +612,7 @@ mod tests {
 
 - [ ] Workspace configuration loads on startup
 - [ ] Workspace configuration saves on changes
-- [ ] Config file created in platform-specific location
+- [ ] Config file created at `.terminalg/workspaces.json`
 - [ ] Workspace tabs render at top of window
 - [ ] Clicking tabs switches active workspace
 - [ ] Active tab has distinct visual style
@@ -675,5 +680,5 @@ mod tests {
 ---
 
 **Document Status:** Ready for Implementation
-**Created:** 2026-01-24
+**Created:** 2025-01-25
 **Author:** rust-architect agent + manual review
