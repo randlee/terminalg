@@ -17,6 +17,7 @@ Sprint 2 integrates Zed's terminal crate into TerminalG, replacing custom settin
 2. Terminal input/output handling
 3. GPU-accelerated terminal rendering with theme colors
 4. Basic scrollback buffer
+5. Runtime-only terminal sessions (no PTY restore on restart)
 
 ### Sprint Breakdown
 | Sprint | Focus | Duration |
@@ -48,6 +49,9 @@ Sprint 2 integrates Zed's terminal crate into TerminalG, replacing custom settin
 - Create custom `TerminalPane` wrapping Zed's `Terminal` struct
 - Integrate with existing WorkspaceView three-pane layout
 - PTY lifecycle fully managed by Zed's terminal crate
+- Terminal sessions persist only while the app is running (no session restore on restart)
+- Terminal history restore is a nice-to-have, not required in Sprint 2
+- Future: track Claude sessions run inside terminals for optional restore (out of scope)
 
 ---
 
@@ -184,11 +188,13 @@ TerminalPane.render() → GPU
 - [ ] Connect terminal to workspace config
 - [ ] Test visibility toggle
 - [ ] Test workspace switching
+- [ ] Lazy-load workspaces: only active workspace fully initializes; others load on first switch
 
 ### Phase 7: State Persistence (1-2 hours)
 - [ ] Update workspace_config.rs for terminal tabs
 - [ ] Save/restore working directories
 - [ ] Test persistence across restarts
+- [ ] Confirm no PTY/session restore on restart (runtime-only)
 
 ---
 
@@ -263,7 +269,7 @@ impl Render for TerminalPane {
 - [ ] Multiple terminal tabs functional
 - [ ] Terminal integrates with WorkspaceView
 - [ ] Terminal visibility toggle works
-- [ ] Terminal state persists across restarts
+- [ ] Terminal tabs persist while app is running (no session restore on restart)
 - [ ] No crashes or memory leaks
 
 ---
