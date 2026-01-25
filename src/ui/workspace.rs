@@ -2,8 +2,12 @@
 //!
 //! Implements workspace tab bar and three-pane layout with configurable visibility.
 
+use crate::terminal::{TerminalPane, TerminalPaneEvent};
 use crate::ui::workspace_config::WorkspaceConfigStore;
-use gpui::{div, prelude::*, px, ElementId, IntoElement, Render, Styled, Task, Window};
+use gpui::{
+    div, prelude::*, px, ElementId, Entity, IntoElement, Render, Styled, Subscription, Task,
+    Window,
+};
 use std::time::Duration;
 use theme::ActiveTheme;
 
@@ -11,6 +15,12 @@ use theme::ActiveTheme;
 pub struct WorkspaceView {
     /// Workspace configuration store
     config_store: WorkspaceConfigStore,
+
+    /// Terminal pane entity
+    terminal_pane: Entity<TerminalPane>,
+
+    /// Subscription to terminal pane events
+    _terminal_subscription: Subscription,
 
     /// Debounce timer for auto-save (task handle)
     save_task: Option<Task<()>>,
@@ -26,7 +36,7 @@ pub enum PaneType {
 
 impl WorkspaceView {
     /// Create new workspace view, loading config from disk
-    pub fn new(_cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let config_store = WorkspaceConfigStore::new().unwrap_or_else(|e| {
             tracing::error!("Failed to load workspace config: {}, using defaults", e);
             // Fallback: create a temporary config store with defaults
@@ -57,8 +67,28 @@ impl WorkspaceView {
             );
         }
 
+        // Create terminal pane with workspace root as working directory
+        let working_directory = Some(config_store.workspace_root().to_path_buf());
+        let terminal_pane = cx.new(|cx| TerminalPane::new(working_directory, cx));
+
+        // Subscribe to terminal pane events
+        let terminal_subscription = cx.subscribe(&terminal_pane, |_this, _pane, event, cx| {
+            match event {
+                TerminalPaneEvent::TitleChanged => {
+                    tracing::debug!("Terminal title changed");
+                    cx.notify();
+                }
+                TerminalPaneEvent::Close => {
+                    tracing::info!("Terminal pane closed");
+                    // Could handle workspace-level terminal close logic here
+                }
+            }
+        });
+
         Self {
             config_store,
+            terminal_pane,
+            _terminal_subscription: terminal_subscription,
             save_task: None,
         }
     }
@@ -186,13 +216,45 @@ impl WorkspaceView {
             })
     }
 
-    /// Render a single placeholder pane
+    /// Render a single pane (terminal uses real component, others are placeholders)
     fn render_pane(&self, pane_type: PaneType, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
 
+        // Terminal pane renders the actual TerminalPane component
+        if pane_type == PaneType::Terminal {
+            return div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .m_2()
+                .bg(theme.colors().panel_background)
+                .rounded_md()
+                .overflow_hidden()
+                .child(
+                    div()
+                        .flex()
+                        .justify_between()
+                        .items_center()
+                        .px_3()
+                        .py_2()
+                        .border_b_1()
+                        .border_color(theme.colors().border)
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.colors().text)
+                                .child("Terminal"),
+                        )
+                        .child(self.render_hide_button(pane_type, cx)),
+                )
+                .child(self.terminal_pane.clone());
+        }
+
+        // Other panes render placeholders
         let label = match pane_type {
             PaneType::FileBrowser => "File Browser",
-            PaneType::Terminal => "Terminal",
+            PaneType::Terminal => unreachable!(),
             PaneType::DocumentViewer => "Document Viewer",
         };
 
