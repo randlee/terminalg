@@ -1,7 +1,7 @@
 # Zed/GPUI Reuse Strategy
 
 **Version:** 1.0
-**Last Updated:** 2026-01-25
+**Last Updated:** 2025-01-25
 **Status:** Draft
 
 ---
