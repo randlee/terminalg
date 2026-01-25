@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Last Updated:** 2025-01-24
-**Current Phase:** Phase 1 (70% complete)
+**Current Phase:** Phase 1 (60% complete)
 
 ---
 
@@ -10,7 +10,7 @@
 
 Development organized into 5 phases, each containing sprints that can be executed sequentially or in parallel where dependencies allow.
 
-**Total Estimated Effort:** 90-130 hours
+**Total Estimated Effort:** 80-110 hours
 **Timeline:** 10-16 days full-time, or 2-3 weeks part-time
 
 ---
@@ -26,7 +26,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 | Phase | Name | Status | Estimated Hours | Sprints |
 |-------|------|--------|-----------------|---------|
-| 1 | Foundation & Workspace | 70% | 20-25 | 4 |
+| 1 | Foundation & Workspace | 60% | 20-25 | 5 |
 | 2 | Zed Terminal Integration | Not Started | 20-30 | 3 |
 | 3 | File/Folder Browser | Not Started | 15-20 | 2 |
 | 4 | Markdown Viewer | Not Started | 15-20 | 2 |
@@ -40,7 +40,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 **Priority:** 1 - App framework w/ empty windows
 
-**Status:** 70% complete (Settings ✓, Theme ✓, GPUI app + workspace pending)
+**Status:** 60% complete (Settings ✓, Theme ✓, GPUI app + workspace pending)
 
 **Dependencies:** None
 
@@ -495,7 +495,7 @@ Phase 5 (Markdown Editor - MVP)
 ### Effort Summary
 
 **Used:** 10-12 hours (Phase 1 foundation)
-**Remaining:** 90-130 hours (Phases 1.4, 2, 3, 4, 5)
+**Remaining:** 70-100 hours (Phases 1.4, 2, 3, 4, 5)
 
 ---
 
@@ -784,7 +784,7 @@ All agents registered in: `.claude/agents/registry.yaml`
 
 ### Aggressive Schedule (Full-Time)
 
-- **Phase 1:** 1.5-2 days (12-16 hours) - 70% done, 6-10 hours remaining → **v0.1.0**
+- **Phase 1:** 1.5-2 days (12-16 hours) - 60% done, 8-12 hours remaining → **v0.1.0**
 - **Phase 2:** 2.5-4 days (20-30 hours) → **v0.2.0**
 - **Phase 3:** 2-3 days (15-20 hours) → **v0.3.0**
 - **Phase 4:** 2-3 days (15-20 hours) → **v0.4.0**
@@ -795,7 +795,7 @@ All agents registered in: `.claude/agents/registry.yaml`
 
 ### Realistic Schedule (Part-Time)
 
-- **Phase 1:** 2-3 sessions - 70% done, 1-2 sessions remaining → **v0.1.0**
+- **Phase 1:** 2-3 sessions - 60% done, 2 sessions remaining → **v0.1.0**
 - **Phase 2:** 3-4 sessions → **v0.2.0**
 - **Phase 3:** 2-3 sessions → **v0.3.0**
 - **Phase 4:** 2-3 sessions → **v0.4.0**
