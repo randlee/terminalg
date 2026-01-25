@@ -1,7 +1,8 @@
 //! Workspace configuration system
 //!
 //! Provides typed workspace configuration management with JSON serialization.
-//! Workspace configs are stored in `.terminalg/workspace.json` (repo-local).
+//! Workspace configs are stored in `.terminalg/workspace.json` relative to the
+//! workspace root (git repo root if available, otherwise current directory).
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -84,13 +85,16 @@ impl WorkspaceConfigStore {
     pub fn new() -> Result<Self> {
         let config_path = Self::get_config_path()?;
 
-        let config = if config_path.exists() {
+        let mut config = if config_path.exists() {
             Self::load_from_file(&config_path)?
         } else {
             let defaults = WorkspacesConfig::default();
             Self::save_to_file(&defaults, &config_path)?;
             defaults
         };
+
+        // Validate loaded config
+        Self::validate_config(&mut config);
 
         Ok(Self {
             config,
@@ -100,7 +104,7 @@ impl WorkspaceConfigStore {
 
     /// Create new workspace config store with a custom config path (for testing)
     pub fn new_with_path(config_path: PathBuf) -> Result<Self> {
-        let config = if config_path.exists() {
+        let mut config = if config_path.exists() {
             Self::load_from_file(&config_path)?
         } else {
             let defaults = WorkspacesConfig::default();
@@ -108,21 +112,51 @@ impl WorkspaceConfigStore {
             defaults
         };
 
+        // Validate loaded config
+        Self::validate_config(&mut config);
+
         Ok(Self {
             config,
             config_path,
         })
     }
 
-    /// Get repo-local workspace config path (.terminalg/workspace.json)
+    /// Validate and fix config invariants after loading
+    fn validate_config(config: &mut WorkspacesConfig) {
+        // Ensure at least one workspace exists
+        if config.workspaces.is_empty() {
+            tracing::warn!("No workspaces found in config, adding default workspace");
+            config.workspaces.push(WorkspaceConfig::default());
+        }
+
+        // Ensure active_workspace_index is within bounds
+        if config.active_workspace_index >= config.workspaces.len() {
+            tracing::warn!(
+                "Invalid active_workspace_index {} (max {}), resetting to 0",
+                config.active_workspace_index,
+                config.workspaces.len() - 1
+            );
+            config.active_workspace_index = 0;
+        }
+    }
+
+    /// Get workspace config path (.terminalg/workspace.json)
+    ///
+    /// Searches for git repo root first (walking up directories), falls back to
+    /// current working directory if not in a git repository.
     fn get_config_path() -> Result<PathBuf> {
-        // Find git repo root by walking up directories
         let current_dir = std::env::current_dir().context("Failed to get current directory")?;
-        let repo_root = Self::find_repo_root(&current_dir)
-            .ok_or_else(|| anyhow::anyhow!("Not in a git repository"))?;
+
+        // Try to find git repo root, fall back to current directory
+        let workspace_root = Self::find_repo_root(&current_dir).unwrap_or_else(|| {
+            tracing::debug!(
+                "Not in a git repository, using current directory for workspace config"
+            );
+            current_dir
+        });
 
         // Create .terminalg directory if it doesn't exist
-        let config_dir = repo_root.join(".terminalg");
+        let config_dir = workspace_root.join(".terminalg");
         fs::create_dir_all(&config_dir).context("Failed to create .terminalg directory")?;
 
         Ok(config_dir.join("workspace.json"))
@@ -172,15 +206,24 @@ impl WorkspaceConfigStore {
         &mut self.config
     }
 
-    /// Get active workspace
+    /// Get active workspace (with bounds checking)
     pub fn active_workspace(&self) -> &WorkspaceConfig {
-        &self.config.workspaces[self.config.active_workspace_index]
+        self.config
+            .workspaces
+            .get(self.config.active_workspace_index)
+            .unwrap_or_else(|| {
+                // This should never happen after validate_config, but be defensive
+                &self.config.workspaces[0]
+            })
     }
 
-    /// Get mutable reference to active workspace
+    /// Get mutable reference to active workspace (with bounds checking)
     pub fn active_workspace_mut(&mut self) -> &mut WorkspaceConfig {
-        let idx = self.config.active_workspace_index;
-        &mut self.config.workspaces[idx]
+        // Fix index if out of bounds
+        if self.config.active_workspace_index >= self.config.workspaces.len() {
+            self.config.active_workspace_index = 0;
+        }
+        &mut self.config.workspaces[self.config.active_workspace_index]
     }
 
     /// Switch to workspace at index
@@ -296,5 +339,59 @@ mod tests {
         let _store = WorkspaceConfigStore::new_with_path(config_path.clone()).unwrap();
 
         assert!(config_path.exists());
+    }
+
+    #[test]
+    fn test_validate_config_fixes_invalid_index() {
+        let mut config = WorkspacesConfig {
+            active_workspace_index: 99, // Invalid - way out of bounds
+            workspaces: vec![WorkspaceConfig::default()],
+        };
+
+        WorkspaceConfigStore::validate_config(&mut config);
+
+        assert_eq!(config.active_workspace_index, 0);
+    }
+
+    #[test]
+    fn test_validate_config_adds_default_workspace_if_empty() {
+        let mut config = WorkspacesConfig {
+            active_workspace_index: 0,
+            workspaces: vec![], // Empty!
+        };
+
+        WorkspaceConfigStore::validate_config(&mut config);
+
+        assert_eq!(config.workspaces.len(), 1);
+        assert_eq!(config.workspaces[0].id, "default");
+    }
+
+    #[test]
+    fn test_active_workspace_handles_corrupted_index() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("workspace.json");
+
+        // Create store and manually corrupt the index
+        let mut store = WorkspaceConfigStore::new_with_path(config_path).unwrap();
+        store.config.active_workspace_index = 999; // Corrupt!
+
+        // Should not panic, should return first workspace
+        let active = store.active_workspace();
+        assert_eq!(active.id, "default");
+    }
+
+    #[test]
+    fn test_active_workspace_mut_fixes_corrupted_index() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("workspace.json");
+
+        // Create store and manually corrupt the index
+        let mut store = WorkspaceConfigStore::new_with_path(config_path).unwrap();
+        store.config.active_workspace_index = 999; // Corrupt!
+
+        // Should not panic, should fix index and return first workspace
+        let active = store.active_workspace_mut();
+        assert_eq!(active.id, "default");
+        assert_eq!(store.config.active_workspace_index, 0); // Index was fixed
     }
 }
