@@ -23,11 +23,21 @@ This document defines the architectural strategy for integrating GPUI (Zed's GPU
 
 ### 1.1 GPUI Publication Status
 
-**Finding (2025-01-24):**
-- GPUI is **NOT published to crates.io**
-- Maintained as workspace crate in Zed monorepo: `crates/gpui`
+**Finding (2025-01-25):**
+- GPUI **IS published to crates.io** as `gpui` (v0.2.x)
+- Also maintained as workspace crate in Zed monorepo: `crates/gpui`
+- Latest crates.io version: **v0.2.2** (Oct 22, 2025)
 - Latest stable Zed release: **v0.220.3** (Jan 22, 2025)
-- Git commit: `3d02817699175909ee72bf28305997094c5cef9d`
+
+**Why we use git tag instead of crates.io:**
+- Phase 2 requires Zed's `terminal`, `settings`, and `theme` crates (NOT on crates.io)
+- All Zed crates must be from the same version for compatibility
+- Git tag pinning ensures version parity across all Zed dependencies
+
+**Reference Codebase:**
+- Zed source at `../zed/` should be checked out to tag **v0.220.3**
+- Agents exploring Zed patterns MUST use this pinned version, not `main`
+- This prevents confusion from API differences between versions
 
 ### 1.2 Dependency Specification
 
@@ -751,7 +761,7 @@ incremental = true
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2025-01-24 | ARCH-RTERM | Initial architecture document |
+| 1.0 | 2026-01-25 | ARCH-RTERM | Initial architecture document |
 | | | | Zed v0.220.3 baseline established |
 
 ---

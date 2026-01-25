@@ -20,7 +20,7 @@ This document describes TerminalG's **Phase 1 custom settings implementation**. 
 ## Project Structure
 
 ```
-your-app/
+terminalg/
 ├── src/
 │   ├── main.rs
 │   ├── settings/
@@ -29,9 +29,14 @@ your-app/
 │   │   └── ui.rs           # UI settings
 │   └── ...
 ├── Cargo.toml
-└── config/
-    └── settings.json       # User settings file
+└── .terminalg/
+    └── settings.json       # Workspace settings (repo-local)
 ```
+
+## Settings Locations
+
+- **User settings:** `~/.config/terminalg/settings.json`
+- **Workspace settings:** `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` (in the project root, typically committed)
 
 ## Cargo.toml Dependencies
 
@@ -184,7 +189,7 @@ impl SettingsStore {
     fn get_config_dir() -> Result<PathBuf> {
         dirs::config_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))
-            .map(|p| p.join("your-app"))
+            .map(|p| p.join("terminalg"))
     }
 
     /// Get full settings file path
@@ -272,7 +277,7 @@ fn main() -> Result<()> {
 
 ## Generated settings.json
 
-First run creates this (in platform-specific config dir):
+First run creates this (in the user config dir at `~/.config/terminalg/settings.json`):
 
 ```json
 {
@@ -296,7 +301,7 @@ First run creates this (in platform-specific config dir):
 }
 ```
 
-User can edit directly, app reloads on next launch (or add notify watcher for live reload).
+User can edit directly, app reloads on next launch (or add notify watcher for live reload). Workspace overrides live in `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` and are loaded per project. App settings track known workspace paths for the current machine.
 
 ## Key Features
 

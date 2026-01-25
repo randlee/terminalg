@@ -7,8 +7,11 @@ on:
       - develop
   push:
     branches:
-      - main
-      - develop
+      - main  # Only direct pushes to main, PRs handle develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
