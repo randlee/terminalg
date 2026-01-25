@@ -5,6 +5,9 @@
 **Parallel:** No (final sprint in Phase 1)
 **Status:** Not Started
 
+**Branch:** `feature/sprint-1-5-workspace-tabs`
+**Worktree:** `/Users/randlee/Documents/github/terminalg-worktrees/feature/sprint-1-5-workspace-tabs`
+
 > **Note:** This sprint uses TerminalG's custom settings and theme systems (Phase 1 approach).
 > Phase 2 will migrate to Zed's `settings` and `theme` crates as git dependencies.
 > See `docs/architecture/zed-reuse-strategy.md` for the complete dependency strategy.
