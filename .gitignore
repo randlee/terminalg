@@ -32,3 +32,6 @@ temp/
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# Workspace configuration (generated at runtime, repo-local)
+.terminalg/

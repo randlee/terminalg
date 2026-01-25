@@ -1,16 +1,9 @@
 //! UI layout and components
 
-// TODO: Implement UI layout
-// Phase 3: UI Layout & Viewers
+mod workspace;
+mod workspace_config;
 
-#[allow(dead_code)] // Placeholder for Phase 3 implementation
-pub struct AppState {
-    // TODO: fields
-}
-
-impl AppState {
-    #[allow(dead_code)] // Placeholder for Phase 3 implementation
-    pub const fn new() -> Self {
-        Self {}
-    }
-}
+pub use workspace::WorkspaceView;
+// Re-export for potential use by other modules
+#[allow(unused_imports)]
+pub use workspace_config::{WorkspaceConfig, WorkspaceConfigStore, WorkspacesConfig};
