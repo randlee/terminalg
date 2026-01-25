@@ -102,6 +102,11 @@ TerminalGApp
 - **View state:** `WorkspaceView` struct holds workspace config
 - **No new globals needed** - workspace config in view state
 
+### 4.3 Settings Locations
+
+- **User settings:** `~/.config/terminalg/settings.json`
+- **Workspace settings:** `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` (repo-local, typically committed)
+
 ---
 
 ## 5. Data Structures
@@ -286,7 +291,7 @@ impl Render for WorkspaceView {
 - [ ] Implement `WorkspaceConfig` struct with serde
 - [ ] Implement `WorkspacesConfig` struct with defaults
 - [ ] Implement `WorkspaceConfigStore` with load/save
-- [ ] Use platform-specific paths (match settings pattern)
+- [ ] Use repo-local path: `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json`
 - [ ] Add unit tests for config serialization
 
 **Test checkpoint:**
@@ -556,7 +561,7 @@ mod tests {
     #[test]
     fn test_workspace_config_store_save_load() {
         let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join("workspaces.json");
+        let config_path = temp_dir.path().join("workspace.json");
 
         // Create and save
         let mut store = WorkspaceConfigStore::new_with_path(config_path.clone()).unwrap();
@@ -571,7 +576,7 @@ mod tests {
     #[test]
     fn test_workspace_switch() {
         let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join("workspaces.json");
+        let config_path = temp_dir.path().join("workspace.json");
         let mut store = WorkspaceConfigStore::new_with_path(config_path).unwrap();
 
         assert_eq!(store.config().active_workspace_index, 0);
@@ -595,7 +600,7 @@ mod tests {
 - [ ] Click "Hide" on terminal (middle pane) works
 - [ ] Switch workspace shows different visibility
 - [ ] Close and reopen app - state persists
-- [ ] Check workspaces.json created in config dir
+- [ ] Check `.terminalg/workspace.json` created in repo root
 - [ ] No crashes during normal usage
 - [ ] Console shows appropriate log messages
 
@@ -607,7 +612,7 @@ mod tests {
 
 - [ ] Workspace configuration loads on startup
 - [ ] Workspace configuration saves on changes
-- [ ] Config file created in platform-specific location
+- [ ] Config file created at `.terminalg/workspace.json`
 - [ ] Workspace tabs render at top of window
 - [ ] Clicking tabs switches active workspace
 - [ ] Active tab has distinct visual style
@@ -675,5 +680,5 @@ mod tests {
 ---
 
 **Document Status:** Ready for Implementation
-**Created:** 2026-01-24
+**Created:** 2026-01-25
 **Author:** rust-architect agent + manual review

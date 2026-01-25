@@ -761,7 +761,7 @@ incremental = true
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2025-01-24 | ARCH-RTERM | Initial architecture document |
+| 1.0 | 2026-01-25 | ARCH-RTERM | Initial architecture document |
 | | | | Zed v0.220.3 baseline established |
 
 ---
