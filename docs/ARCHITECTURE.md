@@ -316,13 +316,15 @@ struct WorkspaceConfig {
 ```
 
 **Storage:**
-- Near-term: platform config dir, e.g. macOS `~/Library/Application Support/terminalg/workspaces/<workspace-id>.json`, Linux `~/.config/terminalg/workspaces/<workspace-id>.json`, Windows `%APPDATA%\\terminalg\\workspaces\\<workspace-id>.json`
-- Workspace-local: `.terminalg/<workspace>.json` in project repos
+- Workspace-local: `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` in project repos
+- Workspace root is the folder containing `.terminalg/`
+- Loading/switching workspaces sets process working directory to the workspace root
+- Repo-local config is user-decided for committing
 
 **Indexing:**
-- App settings track all available workspaces and their config paths
+- App settings track all available workspaces and their config paths for this machine
 
-**Files:** `src/settings/workspace.rs`
+**Files:** `src/ui/workspace_config.rs`
 
 ---
 
