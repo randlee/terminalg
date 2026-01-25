@@ -34,6 +34,11 @@ This document defines the architectural strategy for integrating GPUI (Zed's GPU
 - All Zed crates must be from the same version for compatibility
 - Git tag pinning ensures version parity across all Zed dependencies
 
+**Reference Codebase:**
+- Zed source at `../zed/` should be checked out to tag **v0.220.3**
+- Agents exploring Zed patterns MUST use this pinned version, not `main`
+- This prevents confusion from API differences between versions
+
 ### 1.2 Dependency Specification
 
 **Recommended approach:**

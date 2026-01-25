@@ -20,6 +20,8 @@ This document is the **source of truth** for TerminalG's dependency on Zed crate
 | Current Version | `v0.220.3` (git tag) |
 | Version Policy | Pin to stable release tags, upgrade deliberately |
 
+**Important:** The local Zed checkout at `../zed/` MUST be at tag `v0.220.3`. AI agents exploring Zed patterns must use this pinned version, not `main`, to avoid confusion from API differences.
+
 ### 1.2 License Implications
 
 | Crate Category | License | Implication |
