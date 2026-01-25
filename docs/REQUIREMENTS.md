@@ -32,7 +32,7 @@ Existing tools force workflows into constrained patterns:
 - **Hide/show any pane** with single button click
 - **Integrated viewers** - Markdown, images (no browser needed)
 - **URL recognition and clicking** in terminal output
-- **Workspace configuration** - Separate config file per workspace
+- **Workspace configuration** - Repo-local config per workspace (typically committed)
 - **Real-time test execution** visualization
 
 ---
@@ -93,12 +93,11 @@ Existing tools force workflows into constrained patterns:
 - [ ] Auto-save on change
 
 *Workspace configuration:*
-- [ ] Separate config file per workspace
+- [ ] Separate config file per workspace (repo-local, typically committed)
 - [ ] Auto-save workspace state (open terminals, documents, pane sizes, visibility)
-- [ ] Near-term: Store in platform config dir (macOS `~/Library/Application Support/terminalg/workspaces/<name>.json`, Linux `~/.config/terminalg/workspaces/<name>.json`, Windows `%APPDATA%\\terminalg\\workspaces\\<name>.json`)
-- [ ] Workspace-local: Support `.terminalg/<workspace>.json` in project repos
+- [ ] Workspace-local: `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` in project repos
 - [ ] First-time workspace: Default to file browser + terminal (same root folder)
-- [ ] App settings track all available workspaces and their config paths
+- [ ] App settings track all available workspaces and their config paths for this machine
 
 ### 4.2 Enhanced Features (Phase 4)
 
@@ -190,7 +189,7 @@ Existing tools force workflows into constrained patterns:
 
 ### 6.2 Dependencies
 
-- GPUI not published to crates.io (use git dependency)
+- GPUI is published to crates.io, but we use git tags for version parity with other Zed crates
 - Pin to stable Zed releases (tag-based versioning)
 - Minimize external dependencies
 - Use platform-specific crates where needed (PTY management)

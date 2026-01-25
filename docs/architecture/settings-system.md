@@ -36,7 +36,7 @@ terminalg/
 ## Settings Locations
 
 - **User settings:** `~/.config/terminalg/settings.json`
-- **Workspace settings:** `.terminalg/settings.json` (in the project root)
+- **Workspace settings:** `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` (in the project root, typically committed)
 
 ## Cargo.toml Dependencies
 
@@ -301,7 +301,7 @@ First run creates this (in the user config dir at `~/.config/terminalg/settings.
 }
 ```
 
-User can edit directly, app reloads on next launch (or add notify watcher for live reload). Workspace overrides live in `.terminalg/settings.json` and are loaded per project.
+User can edit directly, app reloads on next launch (or add notify watcher for live reload). Workspace overrides live in `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` and are loaded per project. App settings track known workspace paths for the current machine.
 
 ## Key Features
 
