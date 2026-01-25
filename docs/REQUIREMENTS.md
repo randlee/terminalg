@@ -1,7 +1,7 @@
 # TerminalG Requirements
 
 **Version:** 1.0
-**Last Updated:** 2025-01-24
+**Last Updated:** 2026-01-24
 
 ---
 
