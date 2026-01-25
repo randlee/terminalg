@@ -74,7 +74,7 @@ TerminalG is a GPU-accelerated terminal application built on GPUI, combining ter
 - See `docs/architecture/gpui-integration.md` for details
 
 **Rust Version:**
-- Minimum: 1.70+
+- Minimum: 1.93.0
 - Target: Latest stable
 
 ---

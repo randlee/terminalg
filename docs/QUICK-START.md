@@ -5,7 +5,7 @@ Get TerminalG building and running in 5 minutes.
 ## Prerequisites
 
 ### System Requirements
-- **Rust 1.70+** - https://rustup.rs/
+- **Rust 1.93.0** - https://rustup.rs/
 - **macOS 10.15+**, **Linux** (glibc 2.31+), or **Windows 10+**
 - **Git**
 
@@ -41,7 +41,7 @@ cd terminalg
 
 ### 2. Verify Rust Setup
 ```bash
-rustc --version  # Should be 1.70+
+rustc --version  # Should be 1.93.0
 cargo --version
 ```
 
