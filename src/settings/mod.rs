@@ -7,6 +7,7 @@ pub mod terminal;
 pub mod ui;
 
 use anyhow::{Context, Result};
+use gpui::Global;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -40,6 +41,9 @@ pub struct SettingsStore {
     settings: Settings,
     settings_path: PathBuf,
 }
+
+// Allow SettingsStore to be stored as GPUI global state
+impl Global for SettingsStore {}
 
 impl SettingsStore {
     /// Create new settings store, loading from disk if it exists
