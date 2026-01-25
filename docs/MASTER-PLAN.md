@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-Development organized into 4 phases, each containing sprints that can be executed sequentially or in parallel where dependencies allow.
+Development organized into 5 phases, each containing sprints that can be executed sequentially or in parallel where dependencies allow.
 
 **Total Estimated Effort:** 90-130 hours
 **Timeline:** 10-16 days full-time, or 2-3 weeks part-time
@@ -22,15 +22,15 @@ Development organized into 4 phases, each containing sprints that can be execute
 2. Fully working Zed terminal
 3. Add file/folder browser
 4. Add markdown viewer (preview)
-5. Markdown viewer + editing (post-MVP)
+5. Markdown viewer + editing (MVP)
 
 | Phase | Name | Status | Estimated Hours | Sprints |
 |-------|------|--------|-----------------|---------|
 | 1 | Foundation & Workspace | 70% | 20-25 | 4 |
 | 2 | Zed Terminal Integration | Not Started | 20-30 | 3 |
 | 3 | File/Folder Browser | Not Started | 15-20 | 2 |
-| 4 | Markdown Viewer (MVP) | Not Started | 15-20 | 2 |
-| 5 | Markdown Editor (Post-MVP) | Not Started | 10-15 | 2 |
+| 4 | Markdown Viewer | Not Started | 15-20 | 2 |
+| 5 | Markdown Editor (MVP) | Not Started | 10-15 | 2 |
 
 ---
 
@@ -90,7 +90,7 @@ Development organized into 4 phases, each containing sprints that can be execute
 
 #### Sprint 1.4: GPUI Bootstrap ⏳ IN PROGRESS
 **Duration:** 3-5 hours
-**Status:** Ready to start
+**Status:** In progress
 
 **Detailed Checklist:** `docs/sprints/phase-1-sprint-4-gpui-bootstrap.md`
 
@@ -285,7 +285,7 @@ Development organized into 4 phases, each containing sprints that can be execute
 
 ---
 
-## 6. PHASE 4: Markdown Viewer (MVP)
+## 6. PHASE 4: Markdown Viewer
 
 **Goal:** Implement markdown preview/rendering in document viewer pane.
 
@@ -332,7 +332,7 @@ Development organized into 4 phases, each containing sprints that can be execute
 - [ ] Test: File browser → markdown viewer works
 - [ ] Test: Link navigation works
 
-### Phase 4 Checkpoint (MVP COMPLETE)
+### Phase 4 Checkpoint
 
 **Complete when:**
 - [ ] Markdown viewer renders correctly
@@ -344,17 +344,17 @@ Development organized into 4 phases, each containing sprints that can be execute
 - [ ] Theme applied to all components
 - [ ] Workspace configuration persists everything
 
-**🎉 MVP COMPLETE - All core features functional**
+**Phase 4 COMPLETE - Markdown viewer functional**
 
 ---
 
-## 7. PHASE 5: Markdown Editor (Post-MVP)
+## 7. PHASE 5: Markdown Editor (MVP)
 
 **Goal:** Add markdown editing capability with preview mode.
 
 **Priority:** 5 - Markdown viewer + editing
 
-**Status:** Not started (Post-MVP)
+**Status:** Not started
 
 **Dependencies:** Phase 1-4 complete
 
@@ -394,7 +394,7 @@ Development organized into 4 phases, each containing sprints that can be execute
 - [ ] Test: Split view works
 - [ ] Test: Scroll sync works
 
-### Phase 5 Checkpoint
+### Phase 5 Checkpoint (MVP COMPLETE)
 
 **Complete when:**
 - [ ] Markdown editing mode functional
@@ -404,7 +404,7 @@ Development organized into 4 phases, each containing sprints that can be execute
 - [ ] Split view with scroll sync
 - [ ] All editor features work correctly
 
-**🎉 PHASE 5 COMPLETE - Markdown editing fully functional**
+**🎉 MVP COMPLETE - Markdown editing fully functional**
 - [ ] Add keyboard shortcut for theme cycling
 - [ ] Test: URLs clickable
 - [ ] Test: Settings hot-reload works
@@ -440,13 +440,13 @@ Phase 3 (File Browser)
 └─ Sprint 3.2: File Browser Integration
       ↓ (all complete)
 
-Phase 4 (Markdown Viewer - MVP)
+Phase 4 (Markdown Viewer)
 ├─ Sprint 4.1: Markdown Viewer Core
       ↓
 └─ Sprint 4.2: Markdown Viewer Integration
-      ↓ (MVP COMPLETE) 🎉
+      ↓
 
-Phase 5 (Markdown Editor - Post-MVP)
+Phase 5 (Markdown Editor - MVP)
 ├─ Sprint 5.1: Markdown Editor Core
       ↓
 └─ Sprint 5.2: Editor/Preview Integration
@@ -488,14 +488,14 @@ Phase 5 (Markdown Editor - Post-MVP)
 ### In Progress
 
 **Sprint 1.4:** GPUI Bootstrap
-- Status: Ready to start
+- Status: In progress
 - Blockers: None
 - Next step: Follow `docs/sprints/phase-1-sprint-4-gpui-bootstrap.md`
 
 ### Effort Summary
 
 **Used:** 10-12 hours (Phase 1 foundation)
-**Remaining:** 80-120 hours (Phases 1.4, 2, 3, 4)
+**Remaining:** 90-130 hours (Phases 1.4, 2, 3, 4, 5)
 
 ---
 
@@ -787,24 +787,22 @@ All agents registered in: `.claude/agents/registry.yaml`
 - **Phase 1:** 1.5-2 days (12-16 hours) - 70% done, 6-10 hours remaining → **v0.1.0**
 - **Phase 2:** 2.5-4 days (20-30 hours) → **v0.2.0**
 - **Phase 3:** 2-3 days (15-20 hours) → **v0.3.0**
-- **Phase 4:** 2-3 days (15-20 hours) → **v0.4.0** ← MVP features complete
-- **Phase 5:** 1.5-2 days (10-15 hours) → **v0.5.0**
+- **Phase 4:** 2-3 days (15-20 hours) → **v0.4.0**
+- **Phase 5:** 1.5-2 days (10-15 hours) → **v0.5.0** ← MVP features complete
 - **v1.0.0:** When validated as usable (TBD)
 
-**Total (MVP features):** 8-12 days full-time (Phases 1-4) → v0.4.0
-**Total (with editing):** 9.5-14 days full-time (Phases 1-5) → v0.5.0
+**Total (MVP features):** 9.5-14 days full-time (Phases 1-5) → v0.5.0
 
 ### Realistic Schedule (Part-Time)
 
 - **Phase 1:** 2-3 sessions - 70% done, 1-2 sessions remaining → **v0.1.0**
 - **Phase 2:** 3-4 sessions → **v0.2.0**
 - **Phase 3:** 2-3 sessions → **v0.3.0**
-- **Phase 4:** 2-3 sessions → **v0.4.0** ← MVP features complete
-- **Phase 5:** 2-3 sessions → **v0.5.0**
+- **Phase 4:** 2-3 sessions → **v0.4.0**
+- **Phase 5:** 2-3 sessions → **v0.5.0** ← MVP features complete
 - **v1.0.0:** When validated as usable (TBD)
 
-**Total (MVP features):** 9-13 sessions (~2-3 weeks) → v0.4.0
-**Total (with editing):** 11-16 sessions (~3-4 weeks) → v0.5.0
+**Total (MVP features):** 11-16 sessions (~3-4 weeks) → v0.5.0
 
 ---
 
@@ -833,22 +831,22 @@ All agents registered in: `.claude/agents/registry.yaml`
 - Integrated with workspace config
 - Keyboard navigation works
 
-### Phase 4 Success (Markdown Viewer - MVP)
+### Phase 4 Success (Markdown Viewer)
 - Markdown viewer renders correctly
 - Document tabs functional (multiple documents)
 - File browser → document viewer integration works
 - All three panes working together
 - Theme applied to all components
-- **🎉 MVP COMPLETE**
+- Markdown viewer fully functional
 
-### Phase 5 Success (Markdown Editor - Post-MVP)
+### Phase 5 Success (Markdown Editor - MVP)
 - Markdown editing mode functional
 - Switch between preview/edit/split modes
 - Save changes back to file
 - Syntax highlighting works
 - Split view with scroll sync
 
-### MVP Success (Phases 1-4)
+### MVP Success (Phases 1-5)
 - Three co-equal panes (file browser, terminal, document viewer)
 - Workspace tabs switch full context
 - Zed terminal fully functional + URL clicking
@@ -861,15 +859,8 @@ All agents registered in: `.claude/agents/registry.yaml`
 
 ## 14. Post-MVP Enhancements
 
-**Included in Phase 5 (Markdown Editor):**
-- ✓ Markdown editing with syntax highlighting
-- ✓ Preview/Edit/Split modes
-
 **Future enhancements (not in current plan):**
 - MCP integration layer
-- Test visualization (structured test results)
-- Agent execution visualization
-- Live settings reload / hot-reload
 - Image viewer (currently basic support only)
 - Advanced image features (zoom, pan)
 - Syntax highlighting in markdown code blocks (beyond basic)
