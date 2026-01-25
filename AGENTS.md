@@ -3,6 +3,11 @@
 **Version:** 1.0
 **Last Updated:** 2025-01-24
 
+Notes for this repo:
+
+- For Rust development tasks, use the local skill at `.claude/skills/rust-development/SKILL.md`.
+- Agents defined in `.claude/agents/*` can be used inline as guidance or reference because Codex does not support sub-agents.
+
 ---
 
 ## Project Overview

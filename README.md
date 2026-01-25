@@ -105,7 +105,7 @@ Built with modern Rust tooling:
 
 ## Requirements
 
-- **Rust** 1.70+ - Install from https://rustup.rs/
+- **Rust** 1.93.0 - Install from https://rustup.rs/
 - **Build tools:**
   - macOS: Xcode Command Line Tools
   - Linux: GCC/Clang + pkg-config
