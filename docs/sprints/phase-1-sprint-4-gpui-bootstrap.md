@@ -22,6 +22,86 @@
 
 ---
 
+## CRITICAL LEARNINGS (2026-01-24)
+
+### Dependency Resolution Issues
+
+**Issue 1: core-graphics version conflict**
+- GPUI pulls multiple versions of core-graphics (0.24, 0.25)
+- Root cause: `core-text v21.1.0` (latest) requires `core-graphics v0.25`
+- Zed v0.220.3 uses `core-text v21.0.0` which works with `core-graphics v0.24`
+- **Solution:** Lock core-text version in Cargo.toml
+
+```toml
+[target.'cfg(target_os = "macos")'.dependencies]
+core-text = "=21.0.0"
+```
+
+**Issue 2: Rust version requirement**
+- GPUI v0.220.3 uses unstable features (`ceil_char_boundary`)
+- Requires Rust 1.92 (not stable 1.88)
+- **Solution:** Add `rust-toolchain.toml` to project root
+
+```toml
+[toolchain]
+channel = "1.92"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+```
+
+### System Dependencies (macOS)
+
+**Metal Compiler Required:**
+- GPUI compiles Metal shaders on macOS
+- Requires full Xcode.app (Command Line Tools not sufficient)
+- Fix: `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer`
+- Verify: `xcrun --find metal` should return path
+
+**cmake Required:**
+- GPUI dependency wasmtime requires cmake
+- Install: `brew install cmake`
+
+### Correct GPUI API (v0.220.3)
+
+**Wrong (what doesn't work):**
+```rust
+use gpui::{App, AppContext, ...};
+
+App::new().run(|cx: &mut AppContext| {  // ❌ Wrong types
+    cx.open_window(..., |cx| cx.new_view(...))  // ❌ Wrong API
+})
+```
+
+**Correct (from Zed examples):**
+```rust
+use gpui::{Application, App, Window, Context, Render, ...};
+
+Application::new().run(|cx: &mut App| {  // ✅ Application::new(), App type
+    cx.open_window(
+        WindowOptions { focus: true, ..Default::default() },
+        |_, cx| cx.new(|_| MyView::new()),  // ✅ cx.new(), not cx.new_view()
+    ).unwrap();
+    cx.activate(true);
+});
+
+impl Render for MyView {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // ✅ Takes Window and Context<Self>
+        div().size_full().child("Hello")
+    }
+}
+```
+
+**Key differences:**
+- `Application::new()` not `App::new()`
+- Closure receives `&mut App` not `&mut AppContext`
+- `cx.new(|_| view)` not `cx.new_view(|_| view)`
+- `Render::render()` takes `&mut Window, &mut Context<Self>`
+
+**Reference:** `/Users/randlee/Documents/github/zed/crates/gpui/examples/gradient.rs`
+
+---
+
 ## Step 1: Update Cargo.toml
 
 **File:** `Cargo.toml`
@@ -50,6 +130,18 @@ futures = "0.3"
 - [ ] Add smol for async executor (matches Zed)
 - [ ] Add futures for async utilities
 
+### 1.3 Add macOS Dependency Lock
+
+```toml
+# macOS font dependencies - lock to Zed v0.220.3 compatible versions
+[target.'cfg(target_os = "macos")'.dependencies]
+core-text = "=21.0.0"
+```
+
+**Checklist:**
+- [ ] Add core-text version lock for macOS
+- [ ] This prevents core-graphics v0.24/v0.25 conflict
+
 ### 1.3 Verify Build
 
 ```bash
@@ -71,6 +163,27 @@ Finished `dev` profile [unoptimized + debuginfo] target(s) in 8m 34s
 
 ---
 
+## Step 1.5: Create Rust Toolchain File
+
+**File:** `rust-toolchain.toml` (project root)
+
+Create this file to lock Rust version to 1.92:
+
+```toml
+[toolchain]
+channel = "1.92"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+```
+
+**Checklist:**
+- [ ] Create `rust-toolchain.toml` in project root
+- [ ] Verify Rust 1.92 is installed: `rustup toolchain list`
+- [ ] If not installed: `rustup toolchain install 1.92`
+- [ ] Verify: `rustc --version` should show 1.92.x
+
+---
+
 ## Step 2: Minimal GPUI App
 
 **File:** `src/main.rs`
@@ -80,11 +193,15 @@ Finished `dev` profile [unoptimized + debuginfo] target(s) in 8m 34s
 Add to top of `main.rs`:
 
 ```rust
-use gpui::{App, AppContext, WindowOptions};
+use gpui::{
+    div, prelude::*, px, rgb, size, App, Application, Bounds,
+    Context, Render, Window, WindowBounds, WindowOptions,
+};
 ```
 
 **Checklist:**
-- [ ] Import GPUI types
+- [ ] Import GPUI types (Application, App, Window, Context, Render)
+- [ ] Import element builders (div, prelude, px, rgb, size)
 - [ ] Keep existing imports (settings, theme, logging)
 
 ### 2.2 Create GPUI App
@@ -92,35 +209,53 @@ use gpui::{App, AppContext, WindowOptions};
 Replace or modify `fn main()`:
 
 ```rust
-fn main() {
+fn main() -> Result<()> {
     // Initialize logging (existing code)
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
         .init();
 
+    tracing::info!("TerminalG starting...");
+
     // Load settings (existing code)
-    let settings = SettingsStore::load().unwrap_or_else(|e| {
-        tracing::warn!("Failed to load settings: {}, using defaults", e);
-        SettingsStore::default()
-    });
+    let settings_store = SettingsStore::new()?;
+    tracing::info!("Settings loaded from {:?}", settings_store.settings_path());
 
     // Load theme (existing code)
-    let theme = Theme::by_name(&settings.ui.theme);
-    tracing::info!("Loaded theme: {}", settings.ui.theme);
+    let theme_name = &settings_store.settings().ui.theme;
+    let theme = Theme::by_name(theme_name).unwrap_or_else(Theme::dark);
+    tracing::info!("Loaded theme: {}", theme.name);
 
-    // NEW: Initialize GPUI app
-    App::new().run(|cx: &mut AppContext| {
+    // Initialize GPUI application
+    Application::new().run(move |cx: &mut App| {
         // Store settings and theme in global state
-        cx.set_global(settings);
+        cx.set_global(settings_store);
         cx.set_global(theme);
 
+        // Calculate centered window bounds (1200x800)
+        let bounds = Bounds::centered(None, size(px(1200.0), px(800.0)), cx);
+
         // Open main window
-        cx.open_window(WindowOptions::default(), |cx| {
-            // For now, just return an empty view
-            // We'll add a proper view in Step 3
-            cx.new_view(|_cx| EmptyView)
-        });
+        cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: Some(gpui::TitlebarOptions {
+                    title: Some("TerminalG".into()),
+                    ..Default::default()
+                }),
+                focus: true,
+                ..Default::default()
+            },
+            |_, cx| cx.new(|_| EmptyView),
+        )
+        .expect("Failed to open window");
+
+        cx.activate(true);
+
+        tracing::info!("TerminalG window opened successfully");
     });
+
+    Ok(())
 }
 ```
 
@@ -137,29 +272,53 @@ fn main() {
 Add before `fn main()`:
 
 ```rust
-use gpui::{div, Render, View, ViewContext, IntoElement};
-
+/// Empty view for initial GPUI bootstrap
 struct EmptyView;
 
 impl Render for EmptyView {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        // Get theme from global state
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Get theme and settings from global state
         let theme = cx.global::<Theme>();
+        let settings = cx.global::<SettingsStore>();
+
+        // Convert our theme color to GPUI colors (RGB 0-255 -> 0xRRGGBB)
+        let bg_color = rgb(
+            u32::from(theme.ui.background.r) << 16
+                | u32::from(theme.ui.background.g) << 8
+                | u32::from(theme.ui.background.b),
+        );
+        let fg_color = rgb(
+            u32::from(theme.ui.foreground.r) << 16
+                | u32::from(theme.ui.foreground.g) << 8
+                | u32::from(theme.ui.foreground.b),
+        );
 
         div()
-            .bg(theme.ui.background)
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .bg(bg_color)
             .size_full()
-            .child("TerminalG")
+            .text_color(fg_color)
+            .child(div().text_2xl().child("TerminalG"))
+            .child(
+                div()
+                    .text_sm()
+                    .child(format!("Theme: {}", settings.settings().ui.theme)),
+            )
     }
 }
 ```
 
 **Checklist:**
 - [ ] Create EmptyView struct
-- [ ] Implement Render trait
+- [ ] Implement Render trait with correct signature: `(&mut Window, &mut Context<Self>)`
 - [ ] Use `div()` builder for rendering
-- [ ] Apply theme background color
-- [ ] Display "TerminalG" text
+- [ ] Convert theme colors from RGB u8 to u32 hex format
+- [ ] Apply theme background and foreground colors
+- [ ] Display "TerminalG" text and theme name
+- [ ] Use flexbox for centering
 
 ---
 
