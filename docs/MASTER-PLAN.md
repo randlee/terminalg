@@ -1,8 +1,10 @@
 # TerminalG Master Plan
 
-**Version:** 1.0
-**Last Updated:** 2025-01-24
-**Current Phase:** Phase 1 (60% complete)
+**Version:** 1.1
+**Last Updated:** 2026-01-25
+**Current Phase:** Phase 1 (80% complete)
+**Dependency Strategy:** See `docs/architecture/zed-reuse-strategy.md`
+**License:** GPL-3.0-or-later (required by Zed crate dependencies)
 
 ---
 
@@ -26,7 +28,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 | Phase | Name | Status | Estimated Hours | Sprints |
 |-------|------|--------|-----------------|---------|
-| 1 | Foundation & Workspace | 60% | 20-25 | 5 |
+| 1 | Foundation & Workspace | 80% | 20-25 | 5 |
 | 2 | Zed Terminal Integration | Not Started | 20-30 | 3 |
 | 3 | File/Folder Browser | Not Started | 15-20 | 2 |
 | 4 | Markdown Viewer | Not Started | 15-20 | 2 |
@@ -40,7 +42,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 **Priority:** 1 - App framework w/ empty windows
 
-**Status:** 60% complete (Settings ✓, Theme ✓, GPUI app + workspace pending)
+**Status:** 80% complete (Settings ✓, Theme ✓, GPUI Bootstrap ✓, workspace pending)
 
 **Dependencies:** None
 
@@ -88,23 +90,24 @@ Development organized into 5 phases, each containing sprints that can be execute
 - [x] Test: Load themes without errors
 - [x] Test: Theme colors applied
 
-#### Sprint 1.4: GPUI Bootstrap ⏳ IN PROGRESS
+#### Sprint 1.4: GPUI Bootstrap ✅ COMPLETE
 **Duration:** 3-5 hours
-**Status:** In progress
+**Status:** Complete
 
 **Detailed Checklist:** `docs/sprints/phase-1-sprint-4-gpui-bootstrap.md`
 
 **High-Level Tasks:**
-- [ ] Add GPUI dependency (tag = v0.220.3) to Cargo.toml
-- [ ] Add smol and futures dependencies
-- [ ] Update main.rs with GPUI app initialization
-- [ ] Create empty window with title "TerminalG"
-- [ ] Apply theme background color to window
-- [ ] Test: Window opens
-- [ ] Test: Window interactive (move, resize, close)
-- [ ] Test: No crashes
+- [x] Add GPUI dependency (tag = v0.220.3) to Cargo.toml
+- [x] Add smol and futures dependencies
+- [x] Update main.rs with GPUI app initialization
+- [x] Create empty window with title "TerminalG"
+- [x] Apply theme background color to window
+- [x] Test: Window opens
+- [x] Test: Window interactive (move, resize, close)
+- [x] Test: No crashes
 
 **Supporting Doc:** `docs/architecture/gpui-integration.md`
+**QA Report:** `docs/sprints/phase-1-sprint-4-qa.md`
 
 #### Sprint 1.5: Workspace Tabs & Configuration
 **Duration:** 4-6 hours
@@ -131,7 +134,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 - [x] Theme system working (dark/light themes)
 - [x] `cargo check` passes
 - [x] `cargo build` succeeds
-- [ ] GPUI window opens with theme colors
+- [x] GPUI window opens with theme colors
 - [ ] Workspace tabs functional (UI, switching)
 - [ ] Workspace configuration system working (save/load)
 - [ ] Three placeholder panes rendering
@@ -144,7 +147,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 ## 4. PHASE 2: Zed Terminal Integration
 
-**Goal:** Copy Zed's terminal wholesale, integrate with TerminalG, add URL recognition.
+**Goal:** Integrate Zed's terminal crate via git dependency, migrate to Zed's settings/theme, add URL recognition.
 
 **Priority:** 2 - Fully working Zed terminal (all features, all platforms)
 
@@ -154,41 +157,47 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 **Estimated:** 20-30 hours
 
+**Key Decision:** Use Zed crates as git dependencies (NOT copy/vendor). See `docs/architecture/zed-reuse-strategy.md`.
+
 ### Sprints
 
-#### Sprint 2.1: Copy Zed Terminal
+#### Sprint 2.1: Add Zed Dependencies & Migrate Settings/Theme
 **Duration:** 6-8 hours
 **Parallel:** No (foundation)
 
 **Need to plan sprint:** Detailed implementation checklist
 
 **High-Level Tasks:**
-- [ ] Copy entire `crates/terminal/` from Zed (v0.220.3)
-- [ ] Add to TerminalG as `src/terminal/`
-- [ ] Add necessary dependencies (alacritty_terminal, libc, windows, etc.)
+- [ ] Add Zed crates to Cargo.toml as git dependencies:
+  - `terminal` (GPL-3.0) - core terminal emulation
+  - `settings` (GPL-3.0) - required by terminal
+  - `theme` (GPL-3.0) - required by terminal
+  - `ui` (GPL-3.0) - UI components
+- [ ] Migrate from custom SettingsStore to Zed's settings system
+- [ ] Migrate from custom Theme to Zed's theme system
+- [ ] Update WorkspaceView to use Zed's theme/settings
 - [ ] Verify all platforms compile (macOS, Linux, Windows)
-- [ ] Test: Module compiles without errors
+- [ ] Test: App runs with Zed dependencies
 
-**Key Point:** Minimal modifications - preserve Zed's structure for PR-ability
+**Key Point:** This sprint migrates infrastructure; terminal UI comes in Sprint 2.2
 
-#### Sprint 2.2: Integrate with TerminalG
+#### Sprint 2.2: Terminal Pane Integration
 **Duration:** 8-12 hours
 **Parallel:** No (depends on Sprint 2.1)
 
 **Need to plan sprint:** Detailed implementation checklist
 
 **High-Level Tasks:**
-- [ ] Replace Zed settings references with TerminalG SettingsStore
-- [ ] Replace Zed theme references with TerminalG Theme
-- [ ] Create TerminalPane wrapper for WorkspaceView
-- [ ] Integrate with workspace configuration
+- [ ] Create custom TerminalPane view wrapping Zed's terminal crate
+- [ ] Integrate terminal with WorkspaceView pane system
+- [ ] Integrate with workspace configuration (persist terminal state)
 - [ ] Add terminal tab management (multiple terminals)
 - [ ] Connect to pane visibility system
 - [ ] Test: Terminal opens in workspace
 - [ ] Test: Terminal functional (type, execute, see output)
 - [ ] Test: All Zed features work (copy/paste, mouse, search, etc.)
 
-**Key Point:** Keep Zed terminal logic intact, only adapt integration points
+**Key Point:** Use Zed's terminal crate, write custom TerminalPane view for our UI
 
 #### Sprint 2.3: URL Recognition & Clicking
 **Duration:** 6-10 hours
@@ -306,14 +315,15 @@ Development organized into 5 phases, each containing sprints that can be execute
 **Need to plan sprint:** Detailed implementation checklist
 
 **High-Level Tasks:**
-- [ ] Add pulldown-cmark dependency
-- [ ] Create `src/viewer/markdown.rs` - MarkdownViewer
-- [ ] Parse markdown to AST
-- [ ] Render to GPUI elements (headings, paragraphs, lists, code blocks)
+- [ ] Add Zed's `markdown` crate as git dependency (wraps pulldown-cmark)
+- [ ] Create custom `ArtifactPane` view for document viewing
+- [ ] Integrate Zed's markdown renderer with ArtifactPane
 - [ ] Implement scrolling
-- [ ] Apply theme colors (text, background, code blocks)
+- [ ] Apply theme colors (uses Zed's theme system from Phase 2)
 - [ ] Test: Render markdown file correctly
 - [ ] Test: All markdown elements display
+
+**Key Point:** Use Zed's markdown crate for rendering, write custom ArtifactPane view
 
 #### Sprint 4.2: Markdown Viewer Integration
 **Duration:** 6-8 hours
@@ -422,8 +432,8 @@ Phase 1 (Foundation & Workspace)
 ├─ Sprint 1.1: Project Setup ✅
 ├─ Sprint 1.2: Settings System ✅
 ├─ Sprint 1.3: Theme System ✅
-├─ Sprint 1.4: GPUI Bootstrap ⏳
-└─ Sprint 1.5: Workspace Tabs & Config
+├─ Sprint 1.4: GPUI Bootstrap ✅
+└─ Sprint 1.5: Workspace Tabs & Config ⏳
       ↓ (all complete)
 
 Phase 2 (Zed Terminal)
@@ -487,15 +497,26 @@ Phase 5 (Markdown Editor - MVP)
 
 ### In Progress
 
-**Sprint 1.4:** GPUI Bootstrap
-- Status: In progress
+**Sprint 1.5:** Workspace Tabs & Configuration
+- Status: Not started
 - Blockers: None
-- Next step: Follow `docs/sprints/phase-1-sprint-4-gpui-bootstrap.md`
+- Next step: Plan sprint, create detailed checklist
+
+### Completed This Session (2026-01-24)
+
+**Sprint 1.4:** GPUI Bootstrap ✅
+- GPUI v0.220.3 integrated with git tag pinning
+- Rust 1.92 toolchain locked (required for GPUI)
+- Window opens with theme colors (dark/light)
+- Window close behavior works correctly
+- CI passing on all platforms (macOS, Linux, Windows)
+- 42/42 tests passing
+- QA Report: `docs/sprints/phase-1-sprint-4-qa.md`
 
 ### Effort Summary
 
-**Used:** 10-12 hours (Phase 1 foundation)
-**Remaining:** 70-100 hours (Phases 1.4, 2, 3, 4, 5)
+**Used:** 14-16 hours (Phase 1 foundation + GPUI bootstrap)
+**Remaining:** 65-95 hours (Phases 1.5, 2, 3, 4, 5)
 
 ---
 
@@ -882,19 +903,21 @@ All agents registered in: `.claude/agents/registry.yaml`
 
 - **Requirements:** `docs/REQUIREMENTS.md`
 - **Architecture:** `docs/ARCHITECTURE.md`
+- **Zed Reuse Strategy:** `docs/architecture/zed-reuse-strategy.md` - Source of truth for Zed crate dependencies
 - **This Document:** `docs/MASTER-PLAN.md`
 - **Git Workflow:** `docs/GIT-WORKFLOW.md`
 
 ### Supporting Documents
 
 - **GPUI Integration:** `docs/architecture/gpui-integration.md`
-- **Settings System:** `docs/architecture/settings-system.md`
+- **Settings System:** `docs/architecture/settings-system.md` (Phase 1 only - migrates to Zed in Phase 2)
 - **Development Guide:** `docs/DEVELOPMENT-GUIDE.md`
 - **Quick Start:** `docs/QUICK-START.md`
 
 ### Sprint Documents
 
 - **Phase 1 Sprint 4:** `docs/sprints/phase-1-sprint-4-gpui-bootstrap.md`
+- **Phase 1 Sprint 5:** `docs/sprints/phase-1-sprint-5-design.md`
 - **Future sprints:** Create as needed
 
 ---

@@ -1,5 +1,6 @@
 //! Theme system for terminal and UI styling
 
+use gpui::Global;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -45,6 +46,9 @@ pub struct Theme {
     pub text_selected: Color,
 }
 
+// Allow Theme to be stored as GPUI global state
+impl Global for Theme {}
+
 impl Theme {
     /// Get built-in theme by name
     pub fn by_name(name: &str) -> Option<Self> {
@@ -56,6 +60,7 @@ impl Theme {
     }
 
     /// Dark theme (default)
+    #[allow(clippy::too_many_lines)]
     pub fn dark() -> Self {
         Self {
             name: "dark".to_string(),
@@ -91,6 +96,7 @@ impl Theme {
     }
 
     /// Light theme
+    #[allow(clippy::too_many_lines)]
     pub fn light() -> Self {
         Self {
             name: "light".to_string(),

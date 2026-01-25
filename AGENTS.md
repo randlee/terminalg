@@ -49,3 +49,9 @@ GPU-accelerated terminal application with integrated artifact viewing, built on 
 3. Workspace-level context switching
 4. Integrated viewing (no browser tabs)
 5. Keyboard-driven workflow
+
+## Rules
+1. DO NOT switch main working folder from develop branch
+2. All development work to be done on worktrees created with sc-git-worktree skill.  Worktrees are located at ../terminalg-worktrees/
+3. commit/push/pr when work is complete
+4. DO NOT complete pr unless specifically requested by the user.  User will complete pr AFTER code review and ci passing 100%.

@@ -24,17 +24,16 @@ cargo = { level = "warn", priority = -1 }
 multiple_crate_versions = "allow"
 
 [dependencies]
-# UI Framework
-# Note: gpui not yet published to crates.io, will be extracted from Zed repo in Phase 1.5
-# gpui = { git = "https://github.com/zed-industries/zed", branch = "main" }
+# UI Framework (Phase 1.4)
+gpui = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+
+# Async Runtime (Phase 1.4)
+smol = "2.0"
+futures = "0.3"
 
 # Terminal (Phase 2)
 # alacritty_terminal = "0.12"
 # pty = "0.2"
-
-# Async
-# smol = "2"
-# futures = "0.3"
 
 # Configuration & Settings
 serde = { version = "1.0", features = ["derive"] }
@@ -54,6 +53,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Image support (Phase 3)
 # image = { version = "0.24", features = ["tiff"] }
+
+# macOS font dependencies - lock to Zed v0.220.3 compatible versions
+[target.'cfg(target_os = "macos")'.dependencies]
+core-text = "=21.0.0"
 
 # Platform-specific (Phase 2 - PTY management)
 # [target.'cfg(unix)'.dependencies]

@@ -1,8 +1,9 @@
 # TerminalG Architecture
 
-**Version:** 1.0
-**Last Updated:** 2025-01-24
+**Version:** 1.1
+**Last Updated:** 2026-01-25
 **Target GPUI Version:** Zed v0.220.3
+**Dependency Strategy:** See `docs/architecture/zed-reuse-strategy.md`
 
 ---
 
@@ -56,14 +57,26 @@ TerminalG is a GPU-accelerated terminal application built on GPUI, combining ter
 
 ### 2.1 Core Dependencies
 
-| Component | Technology | Version | Source | Rationale |
-|-----------|-----------|---------|--------|-----------|
-| UI Framework | GPUI | v0.220.3 | git (Zed tag) | GPU-accelerated, proven in Zed |
-| Terminal Emulation | alacritty_terminal | 0.12+ | crates.io | Battle-tested VTE implementation |
-| Async Runtime | smol | 2.0 | crates.io | Lightweight, used by Zed |
-| Configuration | serde/serde_json | 1.0 | crates.io | Standard Rust serialization |
-| Logging | tracing | 0.1 | crates.io | Structured logging |
-| File Watching | notify | 6.0 | crates.io | Settings hot-reload |
+| Component | Technology | Version | Source | License | Rationale |
+|-----------|-----------|---------|--------|---------|-----------|
+| UI Framework | GPUI | v0.220.3 | git (Zed tag) | Apache-2.0 | GPU-accelerated, proven in Zed |
+| Terminal Emulation | alacritty_terminal | 0.12+ | crates.io | Apache-2.0 | Battle-tested VTE implementation |
+| Async Runtime | smol | 2.0 | crates.io | Apache-2.0 | Lightweight, used by Zed |
+| Configuration | serde/serde_json | 1.0 | crates.io | MIT | Standard Rust serialization |
+| Logging | tracing | 0.1 | crates.io | MIT | Structured logging |
+| File Watching | notify | 6.0 | crates.io | MIT | Settings hot-reload |
+
+**Phase 2+ Dependencies (Zed Crates):**
+
+| Component | Zed Crate | Version | License | Phase |
+|-----------|-----------|---------|---------|-------|
+| Terminal Core | `terminal` | v0.220.3 | GPL-3.0 | Phase 2 |
+| Settings | `settings` | v0.220.3 | GPL-3.0 | Phase 2 |
+| Theme | `theme` | v0.220.3 | GPL-3.0 | Phase 2 |
+| UI Components | `ui` | v0.220.3 | GPL-3.0 | Phase 2 |
+| Markdown | `markdown` | v0.220.3 | GPL-3.0 | Phase 4 |
+
+**Note:** Phase 2+ dependencies require TerminalG to be GPL-3.0 licensed. See `docs/architecture/zed-reuse-strategy.md` for details and future flexibility options.
 
 ### 2.2 Dependency Strategy
 
@@ -159,14 +172,16 @@ struct WorkspaceView {
 
 ### 3.3 TerminalPane (Terminal Emulation)
 
-**Integration Strategy:** Use Zed's terminal wholesale with minimal modifications.
+**Integration Strategy:** Use Zed's `terminal` crate as a git dependency, write custom view.
 
 **Approach:**
-- Copy entire `crates/terminal/` from Zed (v0.220.3)
-- Integrate into TerminalG with minimal changes
-- Replace Zed-specific dependencies (settings, theme) with TerminalG equivalents
+- Use Zed's `terminal` crate as git dependency (NOT copied/vendored)
+- Terminal crate wraps `alacritty_terminal` with PTY management
+- Write custom `TerminalPane` view for TerminalG's artifact-focused UI
+- Use Zed's `settings` and `theme` crates (required by terminal crate)
 - Add URL recognition and clicking on top
-- Preserve all Zed terminal features for potential PR back to Zed
+
+**See:** `docs/architecture/zed-reuse-strategy.md` Section 3.5 for complete dependency strategy.
 
 **Responsibilities:**
 - PTY lifecycle management (all platforms: macOS, Linux, Windows)
@@ -758,13 +773,14 @@ RUST_LOG=terminalg=debug cargo run
 
 ### 18.1 Supporting Documents
 
+- **Zed Reuse Strategy:** `docs/architecture/zed-reuse-strategy.md` - Source of truth for Zed crate dependencies
 - **GPUI Integration:** `docs/architecture/gpui-integration.md`
-- **Settings System:** `docs/architecture/settings-system.md`
-- **Terminal Integration:** `docs/architecture/terminal-integration.md` (future)
+- **Settings System:** `docs/architecture/settings-system.md` (Phase 1 only - see zed-reuse-strategy.md for Phase 2 migration)
 
 ### 18.2 External Resources
 
 - **GPUI Source:** https://github.com/zed-industries/zed/tree/v0.220.3/crates/gpui
+- **Zed Terminal:** https://github.com/zed-industries/zed/tree/v0.220.3/crates/terminal
 - **alacritty_terminal:** https://docs.rs/alacritty_terminal
 - **Zed Architecture:** Study Zed's workspace and terminal implementations
 
