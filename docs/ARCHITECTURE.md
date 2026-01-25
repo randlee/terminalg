@@ -301,8 +301,11 @@ struct WorkspaceConfig {
 ```
 
 **Storage:**
-- Near-term: `~/.config/terminalg/workspaces/<workspace-id>.json`
-- Long-term: `.terminalg/<workspace>.json` in project repos
+- Near-term: platform config dir, e.g. macOS `~/Library/Application Support/terminalg/workspaces/<workspace-id>.json`, Linux `~/.config/terminalg/workspaces/<workspace-id>.json`, Windows `%APPDATA%\\terminalg\\workspaces\\<workspace-id>.json`
+- Workspace-local: `.terminalg/<workspace>.json` in project repos
+
+**Indexing:**
+- App settings track all available workspaces and their config paths
 
 **Files:** `src/settings/workspace.rs`
 
@@ -328,6 +331,12 @@ Views (apply settings)
 3. Update global state
 4. Call `cx.notify()` on all views
 5. Views apply new settings on next render
+
+**Schema Versioning:**
+- Settings include a schema version field
+- On load, migrate older versions to the latest schema
+- Unknown fields are ignored for forward compatibility
+- Migration failures surface a user-facing error and fall back to defaults
 
 **Details:** See `docs/architecture/settings-system.md`
 
@@ -591,7 +600,7 @@ cx.spawn(|view, mut cx| async move {
 ### 11.1 macOS (Primary Development Platform)
 
 **PTY:** POSIX via Zed terminal (openpty, fork, execv)
-**Config Path:** `~/.config/terminalg/` or `~/Library/Application Support/terminalg/`
+**Config Path:** `~/Library/Application Support/terminalg/`
 **Shell:** Default to `$SHELL` or `/bin/zsh`
 
 ### 11.2 Linux
@@ -607,7 +616,7 @@ cx.spawn(|view, mut cx| async move {
 **Config Path:** `%APPDATA%\terminalg\`
 **Shell:** Default to PowerShell or `cmd.exe`
 
-**Note:** All platforms supported from Phase 1 using Zed's cross-platform terminal implementation. Primary development and testing on macOS, CI/testing on all platforms.
+**Note:** Phase 1 validates the bootstrap app window on macOS, Linux, and Windows. Full cross-platform terminal functionality arrives in Phase 2 after Zed terminal integration. Primary development and testing on macOS, CI/testing on all platforms.
 
 ---
 

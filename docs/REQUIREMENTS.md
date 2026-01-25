@@ -74,7 +74,8 @@ Existing tools force workflows into constrained patterns:
 
 **Viewers**
 - [ ] Markdown viewer - **PRIORITY** (preview/render mode)
-- [ ] Image viewer (PNG, JPEG, GIF, SVG, TIFF)
+- [ ] Image viewer (PNG, JPEG, GIF, TIFF)
+- [ ] SVG viewer (required; defer if unsupported by chosen image stack)
 - [ ] Automatic viewer selection by file type
 - [ ] Zoom/pan for images
 
@@ -83,8 +84,9 @@ Existing tools force workflows into constrained patterns:
 **Configuration**
 
 *App-wide settings:*
-- [ ] JSON-based settings file (`~/.config/terminalg/settings.json`)
-- [ ] Platform-specific config directories
+- [ ] JSON-based settings file (platform-specific config dir)
+- [ ] Settings paths: macOS `~/Library/Application Support/terminalg/settings.json`, Linux `~/.config/terminalg/settings.json`, Windows `%APPDATA%\\terminalg\\settings.json`
+- [ ] Versioned settings schema with migrations on load
 - [ ] Theme system (dark/light built-in)
 - [ ] Terminal settings (font, padding, scrollback)
 - [ ] UI settings (default layout ratios, theme selection)
@@ -93,9 +95,10 @@ Existing tools force workflows into constrained patterns:
 *Workspace configuration:*
 - [ ] Separate config file per workspace
 - [ ] Auto-save workspace state (open terminals, documents, pane sizes, visibility)
-- [ ] Near-term: Store in `~/.config/terminalg/workspaces/<name>.json`
-- [ ] Long-term: Support `.terminalg/<workspace>.json` in project repos
+- [ ] Near-term: Store in platform config dir (macOS `~/Library/Application Support/terminalg/workspaces/<name>.json`, Linux `~/.config/terminalg/workspaces/<name>.json`, Windows `%APPDATA%\\terminalg\\workspaces\\<name>.json`)
+- [ ] Workspace-local: Support `.terminalg/<workspace>.json` in project repos
 - [ ] First-time workspace: Default to file browser + terminal (same root folder)
+- [ ] App settings track all available workspaces and their config paths
 
 ### 4.2 Enhanced Features (Phase 4)
 
@@ -152,7 +155,7 @@ Existing tools force workflows into constrained patterns:
 | Linux | ✓ Supported | glibc 2.31+, X11/Wayland |
 | Windows | ✓ Supported | 10+, ConPTY support |
 
-**All platforms supported from Phase 1** using Zed's cross-platform terminal implementation.
+**Phase 1 validation on all platforms** (bootstrap app window). Full terminal support via Zed integration arrives in Phase 2.
 
 **Primary development/testing:** macOS
 **CI/Testing:** All platforms
