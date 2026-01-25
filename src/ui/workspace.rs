@@ -42,6 +42,21 @@ impl WorkspaceView {
             config_store.config_path()
         );
 
+        // Set CWD to workspace root to align terminal/file tree
+        let workspace_root = config_store.workspace_root();
+        if let Err(e) = std::env::set_current_dir(workspace_root) {
+            tracing::error!(
+                "Failed to set current directory to workspace root {}: {}",
+                workspace_root.display(),
+                e
+            );
+        } else {
+            tracing::info!(
+                "Current directory set to workspace root: {}",
+                workspace_root.display()
+            );
+        }
+
         Self {
             config_store,
             save_task: None,
