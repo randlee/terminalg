@@ -10,9 +10,7 @@ use gpui::{
 };
 use settings::Settings;
 use std::path::PathBuf;
-use terminal::{
-    terminal_settings::TerminalSettings, Event as TerminalEvent, TerminalBuilder,
-};
+use terminal::{terminal_settings::TerminalSettings, Event as TerminalEvent, TerminalBuilder};
 use theme::ActiveTheme;
 use util::shell::Shell;
 

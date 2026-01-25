@@ -5,8 +5,7 @@
 use crate::terminal::{TerminalPane, TerminalPaneEvent};
 use crate::ui::workspace_config::WorkspaceConfigStore;
 use gpui::{
-    div, prelude::*, px, ElementId, Entity, IntoElement, Render, Styled, Subscription, Task,
-    Window,
+    div, prelude::*, px, ElementId, Entity, IntoElement, Render, Styled, Subscription, Task, Window,
 };
 use std::time::Duration;
 use theme::ActiveTheme;
