@@ -2,7 +2,7 @@
 
 **Status:** Phase 1 - Foundation (Planning)
 **Author:** ARCH-RTERM
-**Date:** 2025-01-25
+**Date:** 2026-01-25
 **Zed Version Target:** v0.220.3
 
 ---
@@ -761,7 +761,7 @@ incremental = true
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2025-01-25 | ARCH-RTERM | Initial architecture document |
+| 1.0 | 2026-01-25 | ARCH-RTERM | Initial architecture document |
 | | | | Zed v0.220.3 baseline established |
 
 ---
