@@ -1,4 +1,21 @@
-# Settings System Architecture (Zed-inspired)
+# Settings System Architecture (Phase 1 - Custom Implementation)
+
+> **Status:** Phase 1 Implementation Only
+>
+> **Migration Plan:** Phase 2 will adopt Zed's `settings`, `settings_json`, and `settings_macros` crates as git dependencies. This is required because Zed's `terminal` crate depends on Zed's settings system - we cannot substitute our own.
+>
+> **See:** `docs/architecture/zed-reuse-strategy.md` Section 3.2 for migration details.
+
+---
+
+## Overview
+
+This document describes TerminalG's **Phase 1 custom settings implementation**. This approach provides a working settings system for Sprints 1.1-1.5 while we evaluate Zed crate adoption.
+
+**Phase 1 (Current):** Custom `SettingsStore` with JSON serialization
+**Phase 2 (Future):** Migrate to Zed's settings crates for terminal integration compatibility
+
+---
 
 ## Project Structure
 

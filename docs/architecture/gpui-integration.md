@@ -2,7 +2,7 @@
 
 **Status:** Phase 1 - Foundation (Planning)
 **Author:** ARCH-RTERM
-**Date:** 2025-01-24
+**Date:** 2026-01-25
 **Zed Version Target:** v0.220.3
 
 ---
@@ -12,6 +12,10 @@
 This document defines the architectural strategy for integrating GPUI (Zed's GPU-accelerated UI framework) into TerminalG. It covers dependency management, component hierarchy, integration patterns, and risk mitigation.
 
 **Key Decision:** Use git-based tag pinning to Zed's stable releases for reproducible, battle-tested builds.
+
+**Related Documents:**
+- `docs/architecture/zed-reuse-strategy.md` - Complete Zed crate dependency strategy (settings, theme, terminal, markdown)
+- `docs/architecture/settings-system.md` - Phase 1 custom settings (will migrate to Zed crates in Phase 2)
 
 ---
 
