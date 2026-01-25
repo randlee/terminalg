@@ -181,7 +181,7 @@ Existing tools force workflows into constrained patterns:
 ### 6.1 Technology Stack
 
 **Required:**
-- Rust (1.70+)
+- Rust (1.93.0)
 - GPUI (Zed's UI framework, git dependency)
 - alacritty_terminal (terminal emulation)
 - smol (async runtime)
