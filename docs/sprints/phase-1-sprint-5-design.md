@@ -5,6 +5,13 @@
 **Parallel:** No (final sprint in Phase 1)
 **Status:** Not Started
 
+> **Note:** This sprint uses TerminalG's custom settings and theme systems (Phase 1 approach).
+> Phase 2 will migrate to Zed's `settings` and `theme` crates as git dependencies.
+> See `docs/architecture/zed-reuse-strategy.md` for the complete dependency strategy.
+>
+> The WorkspaceView implementation is **custom by design** - Zed's workspace crate is too
+> tightly coupled to collaboration features. Our workspace will remain custom through MVP.
+
 ---
 
 ## 1. Objectives
