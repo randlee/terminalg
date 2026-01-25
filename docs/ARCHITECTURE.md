@@ -591,7 +591,7 @@ cx.spawn(|view, mut cx| async move {
 ### 11.1 macOS (Primary Development Platform)
 
 **PTY:** POSIX via Zed terminal (openpty, fork, execv)
-**Config Path:** `~/.config/terminalg/` or `~/Library/Application Support/terminalg/`
+**Config Path:** `~/Library/Application Support/terminalg/`
 **Shell:** Default to `$SHELL` or `/bin/zsh`
 
 ### 11.2 Linux
@@ -607,7 +607,7 @@ cx.spawn(|view, mut cx| async move {
 **Config Path:** `%APPDATA%\terminalg\`
 **Shell:** Default to PowerShell or `cmd.exe`
 
-**Note:** All platforms supported from Phase 1 using Zed's cross-platform terminal implementation. Primary development and testing on macOS, CI/testing on all platforms.
+**Note:** Phase 1 validates the bootstrap app window on macOS, Linux, and Windows. Full cross-platform terminal functionality arrives in Phase 2 after Zed terminal integration. Primary development and testing on macOS, CI/testing on all platforms.
 
 ---
 

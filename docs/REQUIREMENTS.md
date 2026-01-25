@@ -83,8 +83,9 @@ Existing tools force workflows into constrained patterns:
 **Configuration**
 
 *App-wide settings:*
-- [ ] JSON-based settings file (`~/.config/terminalg/settings.json`)
+- [ ] JSON-based settings file (platform-specific config dir)
 - [ ] Platform-specific config directories
+- [ ] Settings paths: macOS `~/Library/Application Support/terminalg/settings.json`, Linux `~/.config/terminalg/settings.json`, Windows `%APPDATA%\\terminalg\\settings.json`
 - [ ] Theme system (dark/light built-in)
 - [ ] Terminal settings (font, padding, scrollback)
 - [ ] UI settings (default layout ratios, theme selection)
@@ -152,7 +153,7 @@ Existing tools force workflows into constrained patterns:
 | Linux | ✓ Supported | glibc 2.31+, X11/Wayland |
 | Windows | ✓ Supported | 10+, ConPTY support |
 
-**All platforms supported from Phase 1** using Zed's cross-platform terminal implementation.
+**Phase 1 validation on all platforms** (bootstrap app window). Full terminal support via Zed integration arrives in Phase 2.
 
 **Primary development/testing:** macOS
 **CI/Testing:** All platforms
