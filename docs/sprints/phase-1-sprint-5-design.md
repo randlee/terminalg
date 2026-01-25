@@ -20,6 +20,8 @@
 ## 1. Objectives
 
 - Create workspace configuration system (save/load state)
+- Define workspace root as folder containing `.terminalg/`
+- Switch process working directory to workspace root on load/switch
 - Implement workspace tab bar UI (top tabs)
 - Implement workspace switching
 - Create placeholder pane layout (3 empty panes)
@@ -103,12 +105,13 @@ TerminalGApp
 
 - **Global state:** `SettingsStore`, `Theme` (existing)
 - **View state:** `WorkspaceView` struct holds workspace config
+- **Workspace root:** directory containing `.terminalg/` (drives file tree root, terminal CWD, document paths)
 - **No new globals needed** - workspace config in view state
 
 ### 4.3 Settings Locations
 
 - **User settings:** `~/.config/terminalg/settings.json`
-- **Workspace settings:** `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` (repo-local, typically committed)
+- **Workspace settings:** `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` (repo-local; user decides whether to commit)
 
 ---
 
