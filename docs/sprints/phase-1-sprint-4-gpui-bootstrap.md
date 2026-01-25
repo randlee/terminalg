@@ -5,6 +5,10 @@
 **Prerequisites:** Phase 1 complete (settings + theme system working)
 **Target:** Minimal GPUI app with empty window showing theme colors
 
+**Branch:** `feature/sprint-1-4-gpui-bootstrap`
+**Worktree:** `../terminalg-worktrees/feature/sprint-1-4-gpui-bootstrap`
+**Base Branch:** `develop`
+
 ---
 
 ## Pre-Implementation Review
@@ -330,8 +334,14 @@ cargo run        # Window opens correctly
 
 ### 6.2 Commit Changes
 
+**Working Directory:** Navigate to worktree first:
 ```bash
-git add Cargo.toml Cargo.lock src/main.rs
+cd ../terminalg-worktrees/feature/sprint-1-4-gpui-bootstrap
+```
+
+**Commit:**
+```bash
+git add Cargo.toml Cargo.lock src/main.rs src/theme/mod.rs
 git commit -m "feat: Add GPUI bootstrap with empty window
 
 - Add GPUI dependency (Zed v0.220.3)
@@ -358,6 +368,66 @@ Phase 1.5 complete: Basic GPUI integration working"
 **Update `README.md`:**
 - [ ] Update project status (Phase 1.5 complete)
 - [ ] Add note about GPUI version (v0.220.3)
+
+---
+
+## Step 7: Quality Gates ⚠️ BLOCKING
+
+**All gates must pass before sprint can be marked complete.**
+
+### Gate 1: Parallel Review & QA ⚠️ BLOCKING
+
+Run these two agents **IN PARALLEL** - both must pass:
+
+**A. Code Review (`rust-code-reviewer`)**
+- Reviews all changes from sprint (git diff)
+- Checks compliance with Rust guidelines
+- Reports only high-confidence issues (≥80% confidence)
+- **BLOCKING:** All issues must be fixed or triaged
+  - Fix immediately: Most issues
+  - Create follow-up sprint: Serious architectural issues
+- Output: `docs/sprints/phase-1-sprint-4-review.md`
+
+**B. QA Validation (`rust-qa-agent`)**
+- Runs complete test suite: `cargo test` (debug + release)
+- Generates coverage report using `cargo-llvm-cov`
+- Verifies coverage is adequate (guideline: 80%, quality > metrics)
+- Checks test quality (no empty tests, no ignored tests)
+- **BLOCKING:** 100% tests must pass, test quality acceptable
+- Output: `docs/sprints/phase-1-sprint-4-qa.md`
+
+**Critical Rules:**
+- ❌ Cannot disable tests without explicit user permission
+- ❌ Cannot modify tests to pass without explicit user permission
+- ❌ Cannot proceed if any tests fail (100% must pass)
+- ⚠️ Coverage guideline: 80% (quality matters more than hitting exact numbers)
+- ✅ Review issues must be fixed or triaged (serious → follow-up sprint)
+- ✅ QA must confirm adequate test coverage for code criticality
+
+**Checklist:**
+- [ ] rust-code-reviewer executed
+- [ ] All review issues fixed or triaged
+- [ ] rust-qa-agent executed
+- [ ] All tests passing (100%)
+- [ ] Coverage adequate for code criticality
+
+### Gate 2: Final Verification
+
+**Checklist:**
+- [ ] All review issues resolved or triaged
+- [ ] All tests passing (100%)
+- [ ] Coverage adequate (threshold met)
+- [ ] Code formatted (`cargo fmt`)
+- [ ] No clippy warnings (`cargo clippy -- -D warnings`)
+
+### Gate 3: Merge & Update
+
+**Checklist:**
+- [ ] Finish feature: `git flow feature finish sprint-1-4-gpui-bootstrap`
+- [ ] Push develop: `git push origin develop`
+- [ ] Update MASTER-PLAN.md status (mark sprint complete)
+- [ ] Commit sprint completion: `git commit -m "docs: mark sprint 1.4 complete"`
+- [ ] Push: `git push origin develop`
 
 ---
 
