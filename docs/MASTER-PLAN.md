@@ -2,7 +2,7 @@
 
 **Version:** 1.1
 **Last Updated:** 2026-01-25
-**Current Phase:** Phase 1 (80% complete)
+**Current Phase:** Phase 1 (95% complete - Sprint 1.5 PR pending)
 **Dependency Strategy:** See `docs/architecture/zed-reuse-strategy.md`
 **License:** GPL-3.0-or-later (required by Zed crate dependencies)
 
@@ -28,7 +28,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 | Phase | Name | Status | Estimated Hours | Sprints |
 |-------|------|--------|-----------------|---------|
-| 1 | Foundation & Workspace | 80% | 20-25 | 5 |
+| 1 | Foundation & Workspace | 95% (PR pending) | 20-25 | 5 |
 | 2 | Zed Terminal Integration | Not Started | 20-30 | 3 |
 | 3 | File/Folder Browser | Not Started | 15-20 | 2 |
 | 4 | Markdown Viewer | Not Started | 15-20 | 2 |
@@ -42,7 +42,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 **Priority:** 1 - App framework w/ empty windows
 
-**Status:** 80% complete (Settings ✓, Theme ✓, GPUI Bootstrap ✓, workspace pending)
+**Status:** 95% complete (Settings ✓, Theme ✓, GPUI Bootstrap ✓, Workspace Tabs PR pending)
 
 **Dependencies:** None
 
@@ -109,22 +109,28 @@ Development organized into 5 phases, each containing sprints that can be execute
 **Supporting Doc:** `docs/architecture/gpui-integration.md`
 **QA Report:** `docs/sprints/phase-1-sprint-4-qa.md`
 
-#### Sprint 1.5: Workspace Tabs & Configuration
+#### Sprint 1.5: Workspace Tabs & Configuration ✅ COMPLETE (PR #12)
 **Duration:** 4-6 hours
-**Status:** Not started
+**Status:** Complete - PR pending merge
 
-**Need to plan sprint:** Detailed implementation checklist
+**Design Doc:** `docs/sprints/phase-1-sprint-5-design.md`
 
 **High-Level Tasks:**
-- [ ] Create WorkspaceConfig struct (save/load workspace state)
-- [ ] Implement workspace tab bar UI (top tabs)
-- [ ] Implement workspace switching
-- [ ] Create placeholder pane layout (3 empty panes)
-- [ ] Add pane visibility controls (hide/show buttons)
-- [ ] Auto-save workspace config on changes
-- [ ] Default workspace: file browser + terminal visible
-- [ ] Test: Workspace tabs switch
-- [ ] Test: Workspace config persists
+- [x] Create WorkspaceConfig struct (save/load workspace state)
+- [x] Implement workspace tab bar UI (top tabs)
+- [x] Implement workspace switching
+- [x] Create placeholder pane layout (3 panes: File Browser, Terminal, Document Viewer)
+- [x] Add pane visibility controls (hide/show buttons)
+- [x] Auto-save workspace config on changes (200ms debounce)
+- [x] Default workspace: file browser + terminal visible
+- [x] Config validation (bounds checking, empty workspace handling)
+- [x] Git repo optional (falls back to current directory)
+- [x] Test: Workspace tabs switch
+- [x] Test: Workspace config persists
+- [x] Test: 54 tests passing (11 new workspace_config tests)
+
+**PR:** https://github.com/randlee/terminalg/pull/12
+**Branch:** `feature/sprint-1-5-workspace-tabs`
 
 ### Phase 1 Checkpoint
 
@@ -135,13 +141,13 @@ Development organized into 5 phases, each containing sprints that can be execute
 - [x] `cargo check` passes
 - [x] `cargo build` succeeds
 - [x] GPUI window opens with theme colors
-- [ ] Workspace tabs functional (UI, switching)
-- [ ] Workspace configuration system working (save/load)
-- [ ] Three placeholder panes rendering
-- [ ] Pane visibility controls work (hide/show)
-- [ ] No crashes or errors
+- [x] Workspace tabs functional (UI, switching) - PR #12
+- [x] Workspace configuration system working (save/load) - PR #12
+- [x] Three placeholder panes rendering - PR #12
+- [x] Pane visibility controls work (hide/show) - PR #12
+- [ ] No crashes or errors - pending manual testing after PR merge
 
-**Ready for:** Phase 2 (Zed Terminal Integration)
+**Ready for:** Phase 2 (Zed Terminal Integration) - after PR #12 merge
 
 ---
 
@@ -433,7 +439,7 @@ Phase 1 (Foundation & Workspace)
 ├─ Sprint 1.2: Settings System ✅
 ├─ Sprint 1.3: Theme System ✅
 ├─ Sprint 1.4: GPUI Bootstrap ✅
-└─ Sprint 1.5: Workspace Tabs & Config ⏳
+└─ Sprint 1.5: Workspace Tabs & Config ✅ (PR #12 pending merge)
       ↓ (all complete)
 
 Phase 2 (Zed Terminal)
@@ -497,26 +503,34 @@ Phase 5 (Markdown Editor - MVP)
 
 ### In Progress
 
-**Sprint 1.5:** Workspace Tabs & Configuration
-- Status: Not started
-- Blockers: None
-- Next step: Plan sprint, create detailed checklist
+**Phase 1:** Ready for completion after PR #12 merge
+- Sprint 1.5 PR: https://github.com/randlee/terminalg/pull/12
+- Pending: Manual testing, CI verification, merge
+- Next step: Merge PR, tag v0.1.0, begin Phase 2
 
-### Completed This Session (2026-01-24)
+### Completed This Session (2026-01-25)
 
-**Sprint 1.4:** GPUI Bootstrap ✅
+**Sprint 1.5:** Workspace Tabs & Configuration ✅
+- WorkspaceConfigStore with JSON persistence to `.terminalg/workspace.json`
+- WorkspaceView with tab bar for workspace switching
+- Three-pane layout (File Browser, Terminal, Document Viewer placeholders)
+- Pane visibility toggles with Hide buttons
+- 200ms debounced auto-save on config changes
+- Config validation (bounds checking, empty workspace handling)
+- Git repo optional (falls back to current directory)
+- Code review completed (rust-code-reviewer agent)
+- 54/54 tests passing (11 new workspace_config tests)
+- PR: https://github.com/randlee/terminalg/pull/12
+
+**Previous Session (2026-01-24):**
+- Sprint 1.4: GPUI Bootstrap ✅
 - GPUI v0.220.3 integrated with git tag pinning
-- Rust 1.92 toolchain locked (required for GPUI)
-- Window opens with theme colors (dark/light)
-- Window close behavior works correctly
-- CI passing on all platforms (macOS, Linux, Windows)
-- 42/42 tests passing
 - QA Report: `docs/sprints/phase-1-sprint-4-qa.md`
 
 ### Effort Summary
 
-**Used:** 14-16 hours (Phase 1 foundation + GPUI bootstrap)
-**Remaining:** 65-95 hours (Phases 1.5, 2, 3, 4, 5)
+**Used:** ~18-20 hours (Phase 1 complete)
+**Remaining:** 60-90 hours (Phases 2, 3, 4, 5)
 
 ---
 
