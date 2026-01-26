@@ -5,12 +5,12 @@
 
 use collections::HashMap;
 use gpui::{
-    div, prelude::*, px, App, Context, EventEmitter, FocusHandle, Focusable, IntoElement,
-    KeyDownEvent, Render, Styled, Subscription, Task, Window,
+    div, prelude::*, px, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
+    KeyDownEvent, Render, Styled, Task, Window,
 };
 use settings::Settings;
 use std::path::PathBuf;
-use terminal::{terminal_settings::TerminalSettings, Event as TerminalEvent, TerminalBuilder};
+use terminal::{terminal_settings::TerminalSettings, Event as TerminalEvent, Terminal, TerminalBuilder};
 use theme::ActiveTheme;
 use util::shell::Shell;
 
@@ -27,37 +27,51 @@ pub enum TerminalPaneEvent {
 
 /// Terminal pane wrapping Zed's Terminal
 pub struct TerminalPane {
-    /// Terminal tabs (each tab is a separate terminal session)
-    tabs: Vec<TerminalTab>,
-    /// Active tab index
-    active_tab: usize,
+    /// Terminal tabs per workspace
+    tabs_by_workspace: HashMap<String, Vec<TerminalTab>>,
+    /// Active workspace ID
+    active_workspace_id: String,
+    /// Active tab index per workspace
+    active_tab_by_workspace: HashMap<String, usize>,
+    /// Working directory per workspace
+    working_directory_by_workspace: HashMap<String, Option<PathBuf>>,
     /// Focus handle for keyboard input
     focus_handle: FocusHandle,
-    /// Subscriptions to terminal events
-    subscriptions: Vec<Subscription>,
 }
 
 impl TerminalPane {
     /// Create a new terminal pane with an initial terminal
-    pub fn new(working_directory: Option<PathBuf>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        workspace_id: String,
+        working_directory: Option<PathBuf>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let focus_handle = cx.focus_handle();
-        let pane = Self {
-            tabs: Vec::new(),
-            active_tab: 0,
+        let mut pane = Self {
+            tabs_by_workspace: HashMap::default(),
+            active_workspace_id: workspace_id,
+            active_tab_by_workspace: HashMap::default(),
+            working_directory_by_workspace: HashMap::default(),
             focus_handle,
-            subscriptions: Vec::new(),
         };
 
         // Spawn initial terminal
-        pane.spawn_terminal(working_directory, cx);
+        let active_workspace_id = pane.active_workspace_id.clone();
+        pane.working_directory_by_workspace
+            .insert(active_workspace_id.clone(), working_directory.clone());
+        pane.spawn_terminal(active_workspace_id, working_directory, cx);
 
         pane
     }
 
     /// Spawn a new terminal tab
-    #[allow(clippy::unused_self)] // Method semantically operates on this pane
     #[allow(clippy::needless_pass_by_ref_mut)] // cx.spawn requires &mut Context
-    pub fn spawn_terminal(&self, working_directory: Option<PathBuf>, cx: &mut Context<Self>) {
+    pub fn spawn_terminal(
+        &mut self,
+        workspace_id: String,
+        working_directory: Option<PathBuf>,
+        cx: &mut Context<Self>,
+    ) {
         let settings = TerminalSettings::get_global(cx);
         let shell = Shell::System;
         let env: HashMap<String, String> = std::env::vars().collect();
@@ -68,7 +82,8 @@ impl TerminalPane {
         // Get window ID for PTY
         let window_id = cx.entity_id().as_u64();
 
-        // Clone working_directory for the async closure
+        // Clone working_directory and workspace_id for the async closure
+        let workspace_key = workspace_id.clone();
         let working_dir = working_directory.clone();
 
         // Spawn terminal asynchronously
@@ -97,17 +112,24 @@ impl TerminalPane {
                         // Create the terminal entity and subscribe to events
                         let terminal = cx.new(|cx| builder.subscribe(cx));
 
-                        let tab = TerminalTab::new(terminal.clone(), working_dir, cx);
-
                         // Subscribe to terminal events
-                        let subscription =
-                            cx.subscribe(&terminal, |pane: &mut Self, _terminal, event, cx| {
-                                pane.handle_terminal_event(event, cx);
+                        let subscription = cx.subscribe(
+                            &terminal,
+                            |pane: &mut Self, terminal, event, cx| {
+                                pane.handle_terminal_event(&terminal, event, cx);
                             });
 
-                        pane.tabs.push(tab);
-                        pane.active_tab = pane.tabs.len() - 1;
-                        pane.subscriptions.push(subscription);
+                        let tab = TerminalTab::new(terminal.clone(), subscription, working_dir, cx);
+
+                        let tabs = pane
+                            .tabs_by_workspace
+                            .entry(workspace_key.clone())
+                            .or_insert_with(Vec::new);
+                        tabs.push(tab);
+
+                        let active_index = tabs.len().saturating_sub(1);
+                        pane.active_tab_by_workspace
+                            .insert(workspace_key.clone(), active_index);
                         cx.notify();
                     });
                 }
@@ -120,24 +142,19 @@ impl TerminalPane {
     }
 
     /// Handle terminal events
-    fn handle_terminal_event(&mut self, event: &TerminalEvent, cx: &mut Context<Self>) {
+    fn handle_terminal_event(
+        &mut self,
+        terminal: &Entity<Terminal>,
+        event: &TerminalEvent,
+        cx: &mut Context<Self>,
+    ) {
         match event {
             TerminalEvent::TitleChanged | TerminalEvent::BreadcrumbsChanged => {
                 cx.emit(TerminalPaneEvent::TitleChanged);
                 cx.notify();
             }
             TerminalEvent::CloseTerminal => {
-                // Remove the active terminal tab
-                if !self.tabs.is_empty() {
-                    self.tabs.remove(self.active_tab);
-                    if self.active_tab >= self.tabs.len() && !self.tabs.is_empty() {
-                        self.active_tab = self.tabs.len() - 1;
-                    }
-                    if self.tabs.is_empty() {
-                        cx.emit(TerminalPaneEvent::Close);
-                    }
-                    cx.notify();
-                }
+                self.close_terminal_by_id(terminal.entity_id(), cx);
             }
             TerminalEvent::Wakeup => {
                 cx.notify();
@@ -150,21 +167,63 @@ impl TerminalPane {
         }
     }
 
+    /// Switch to a specific workspace (lazy-loads terminals on first switch)
+    pub fn set_active_workspace(
+        &mut self,
+        workspace_id: String,
+        working_directory: Option<PathBuf>,
+        cx: &mut Context<Self>,
+    ) {
+        self.active_workspace_id = workspace_id.clone();
+        self.working_directory_by_workspace
+            .insert(workspace_id.clone(), working_directory.clone());
+        if !self.tabs_by_workspace.contains_key(&workspace_id) {
+            self.tabs_by_workspace.insert(workspace_id.clone(), Vec::new());
+        }
+        if !self.active_tab_by_workspace.contains_key(&workspace_id) {
+            self.active_tab_by_workspace.insert(workspace_id.clone(), 0);
+        }
+        let is_empty = self
+            .tabs_by_workspace
+            .get(&workspace_id)
+            .is_some_and(|tabs| tabs.is_empty());
+        if is_empty {
+            self.spawn_terminal(workspace_id, working_directory, cx);
+        } else {
+            cx.notify();
+        }
+    }
+
     /// Get the active terminal tab
     #[allow(dead_code)]
     pub fn active_tab(&self) -> Option<&TerminalTab> {
-        self.tabs.get(self.active_tab)
+        self.tabs_by_workspace
+            .get(&self.active_workspace_id)
+            .and_then(|tabs| {
+                let index = self.active_tab_by_workspace.get(&self.active_workspace_id)?;
+                tabs.get(*index)
+            })
     }
 
     /// Get the active terminal tab mutably
     pub fn active_tab_mut(&mut self) -> Option<&mut TerminalTab> {
-        self.tabs.get_mut(self.active_tab)
+        let active_index = *self
+            .active_tab_by_workspace
+            .get(&self.active_workspace_id)?;
+        self.tabs_by_workspace
+            .get_mut(&self.active_workspace_id)
+            .and_then(|tabs| tabs.get_mut(active_index))
     }
 
     /// Switch to a specific tab
     pub fn switch_tab(&mut self, index: usize, cx: &mut Context<Self>) {
-        if index < self.tabs.len() {
-            self.active_tab = index;
+        let tabs = match self.tabs_by_workspace.get(&self.active_workspace_id) {
+            Some(tabs) => tabs,
+            None => return,
+        };
+        if index < tabs.len() {
+            self.active_tab_by_workspace
+                .insert(self.active_workspace_id.clone(), index);
             cx.notify();
         }
     }
@@ -172,15 +231,11 @@ impl TerminalPane {
     /// Close the active tab
     #[allow(dead_code)]
     pub fn close_active_tab(&mut self, cx: &mut Context<Self>) {
-        if !self.tabs.is_empty() {
-            self.tabs.remove(self.active_tab);
-            if self.active_tab >= self.tabs.len() && !self.tabs.is_empty() {
-                self.active_tab = self.tabs.len() - 1;
-            }
-            if self.tabs.is_empty() {
-                cx.emit(TerminalPaneEvent::Close);
-            }
-            cx.notify();
+        let terminal_id = self
+            .active_tab()
+            .map(|tab| tab.terminal.entity_id());
+        if let Some(terminal_id) = terminal_id {
+            self.close_terminal_by_id(terminal_id, cx);
         }
     }
 
@@ -191,14 +246,15 @@ impl TerminalPane {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let option_as_meta = TerminalSettings::get_global(cx).option_as_meta;
         if let Some(tab) = self.active_tab_mut() {
-            // Convert keystroke to terminal input
-            if let Some(input) = keystroke_to_input(&event.keystroke) {
-                tab.terminal.update(cx, |terminal, _| {
-                    terminal.input(input);
-                });
-                cx.notify();
-            }
+            tab.terminal.update(cx, |terminal, cx| {
+                let handled = terminal.try_keystroke(&event.keystroke, option_as_meta);
+                if handled {
+                    cx.stop_propagation();
+                }
+            });
+            cx.notify();
         }
     }
 
@@ -206,6 +262,14 @@ impl TerminalPane {
     #[allow(clippy::needless_pass_by_ref_mut)] // cx.listener requires &mut Context
     fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let tabs: &[TerminalTab] = match self.tabs_by_workspace.get(&self.active_workspace_id) {
+            Some(tabs) => tabs.as_slice(),
+            None => &[],
+        };
+        let active_tab_index = *self
+            .active_tab_by_workspace
+            .get(&self.active_workspace_id)
+            .unwrap_or(&0);
 
         div()
             .h(px(32.0))
@@ -215,8 +279,8 @@ impl TerminalPane {
             .bg(theme.colors().tab_bar_background)
             .border_t_1()
             .border_color(theme.colors().border)
-            .children(self.tabs.iter().enumerate().map(|(idx, tab)| {
-                let is_active = idx == self.active_tab;
+            .children(tabs.iter().enumerate().map(|(idx, tab)| {
+                let is_active = idx == active_tab_index;
                 let title = tab.title();
 
                 div()
@@ -246,7 +310,13 @@ impl TerminalPane {
                     .hover(|s| s.text_color(theme.colors().text))
                     .child("+")
                     .on_click(cx.listener(|this, _, _window, cx| {
-                        this.spawn_terminal(None, cx);
+                        let workspace_id = this.active_workspace_id.clone();
+                        let working_directory = this
+                            .working_directory_by_workspace
+                            .get(&workspace_id)
+                            .cloned()
+                            .unwrap_or(None);
+                        this.spawn_terminal(workspace_id, working_directory, cx);
                     })),
             )
     }
@@ -257,7 +327,16 @@ impl TerminalPane {
     fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
 
-        if let Some(tab) = self.tabs.get(self.active_tab) {
+        let tabs: &[TerminalTab] = match self.tabs_by_workspace.get(&self.active_workspace_id) {
+            Some(tabs) => tabs.as_slice(),
+            None => &[],
+        };
+        let active_tab_index = *self
+            .active_tab_by_workspace
+            .get(&self.active_workspace_id)
+            .unwrap_or(&0);
+
+        if let Some(tab) = tabs.get(active_tab_index) {
             let terminal = tab.terminal.read(cx);
             let content = terminal.last_content();
 
@@ -335,23 +414,34 @@ impl Render for TerminalPane {
     }
 }
 
-/// Convert a GPUI keystroke to terminal input bytes
-fn keystroke_to_input(keystroke: &gpui::Keystroke) -> Option<Vec<u8>> {
-    use terminal::mappings::keys::to_esc_str;
+impl TerminalPane {
+    fn close_terminal_by_id(&mut self, terminal_id: gpui::EntityId, cx: &mut Context<Self>) {
+        let mut target: Option<(String, usize)> = None;
+        for (workspace_id, tabs) in &self.tabs_by_workspace {
+            if let Some(index) = tabs
+                .iter()
+                .position(|tab| tab.matches_terminal(terminal_id))
+            {
+                target = Some((workspace_id.clone(), index));
+                break;
+            }
+        }
 
-    // Try to convert using Zed's key mapping
-    if let Some(esc_str) = to_esc_str(
-        keystroke,
-        &terminal::alacritty_terminal::term::TermMode::empty(),
-        false,
-    ) {
-        return Some(esc_str.as_bytes().to_vec());
+        if let Some((workspace_id, index)) = target {
+            if let Some(tabs) = self.tabs_by_workspace.get_mut(&workspace_id) {
+                tabs.remove(index);
+                let active_index = self
+                    .active_tab_by_workspace
+                    .entry(workspace_id.clone())
+                    .or_insert(0);
+                if *active_index >= tabs.len() && !tabs.is_empty() {
+                    *active_index = tabs.len() - 1;
+                }
+                if tabs.is_empty() && workspace_id == self.active_workspace_id {
+                    cx.emit(TerminalPaneEvent::Close);
+                }
+                cx.notify();
+            }
+        }
     }
-
-    // Fallback for printable characters
-    if keystroke.key.len() == 1 && !keystroke.modifiers.control && !keystroke.modifiers.alt {
-        return Some(keystroke.key.as_bytes().to_vec());
-    }
-
-    None
 }

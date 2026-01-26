@@ -68,7 +68,9 @@ impl WorkspaceView {
 
         // Create terminal pane with workspace root as working directory
         let working_directory = Some(config_store.workspace_root().to_path_buf());
-        let terminal_pane = cx.new(|cx| TerminalPane::new(working_directory, cx));
+        let workspace_id = config_store.active_workspace().id.clone();
+        let terminal_pane =
+            cx.new(|cx| TerminalPane::new(workspace_id, working_directory, cx));
 
         // Subscribe to terminal pane events
         let terminal_subscription = cx.subscribe(&terminal_pane, |_this, _pane, event, cx| {
@@ -96,6 +98,19 @@ impl WorkspaceView {
     fn switch_workspace(&mut self, index: usize, cx: &mut Context<Self>) {
         tracing::info!("Switching to workspace {index}");
         self.config_store.switch_workspace(index);
+        let workspace_root = self.config_store.workspace_root();
+        if let Err(e) = std::env::set_current_dir(workspace_root) {
+            tracing::error!(
+                "Failed to set current directory to workspace root {}: {}",
+                workspace_root.display(),
+                e
+            );
+        }
+        let workspace_id = self.config_store.active_workspace().id.clone();
+        let working_directory = Some(workspace_root.to_path_buf());
+        self.terminal_pane.update(cx, |terminal_pane, cx| {
+            terminal_pane.set_active_workspace(workspace_id, working_directory, cx);
+        });
         cx.notify();
         self.schedule_save(cx);
     }
