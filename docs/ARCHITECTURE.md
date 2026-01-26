@@ -130,6 +130,7 @@ impl TerminalGApp {
 **Responsibilities:**
 - Workspace-level tab management (top tabs)
 - Lazy-load workspaces (only active workspace fully initializes; others on first switch)
+- Keep terminal sessions alive across workspace switches (per-workspace terminals)
 - Three-pane layout management
 - Pane visibility controls (hide/show buttons)
 - Terminal tab management (bottom of terminal pane)

@@ -98,6 +98,8 @@ Existing tools force workflows into constrained patterns:
 - [ ] Workspace-local: `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` in project repos
 - [ ] Workspace root is the folder containing `.terminalg/`
 - [ ] Loading/switching workspaces sets the process working directory to the workspace root
+- [ ] Terminal tabs remain active across workspace switches (runtime-only sessions)
+- [ ] Document tabs may be lazily reloaded for memory recovery (non-critical)
 - [ ] First-time workspace: Default to file browser + terminal (same root folder)
 - [ ] App settings track all available workspaces and their config paths for this machine
 

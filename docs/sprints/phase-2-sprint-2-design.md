@@ -54,6 +54,7 @@ Sprint 2 integrates Zed's terminal crate into TerminalG, replacing custom settin
 - Terminal sessions persist only while the app is running (no session restore on restart)
 - Terminal history restore is a nice-to-have, not required in Sprint 2
 - Future: track Claude sessions run inside terminals for optional restore (out of scope)
+- Terminal sessions remain active across workspace switches (per-workspace terminals stay alive)
 
 ---
 
@@ -188,6 +189,7 @@ TerminalPane.render() → GPU
 - [x] Connect terminal to workspace
 - [x] Test visibility toggle
 - [x] Workspace root used as terminal working directory
+- [ ] Ensure per-workspace terminal sessions remain active across workspace switches
 
 ### Phase 7: State Persistence (1-2 hours) - DEFERRED
 - [ ] Update workspace_config.rs for terminal tabs
