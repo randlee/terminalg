@@ -82,7 +82,7 @@ const URL_REGEX: &str = r#"(ipfs:|ipns:|magnet:|mailto:|gemini://|gopher://|http
 User Mouse Move (Ctrl/Cmd held)
     ↓ GPUI MouseMoveEvent
 Terminal.mouse_move()
-    ↓ Checks modifiers.secondary()
+    ↓ Checks modifiers.secondary() (Cmd on macOS, Ctrl on Windows/Linux)
     ↓ Throttles (5px spatial, 100ms temporal)
 InternalEvent::FindHyperlink(position, open=false)
     ↓
@@ -153,6 +153,9 @@ const DEFAULT_PATH_REGEXES: &[&str] = &[
     r"[\w\-/\.]+\.(?:rs|js|ts|py|go|java|c|cpp|h|md|txt)",
 ];
 ```
+
+**Note:** These path regexes can be noisy. If false positives are an issue, consider
+gating path detection behind a flag or trimming the patterns in Sprint 2.3.
 
 2. In `spawn_terminal()` method, replace line 83:
 
@@ -327,6 +330,7 @@ fn handle_navigation_target(
     if let Some(terminal::MaybeNavigationTarget::Url(url)) = target {
         tracing::debug!("Hovering URL: {}", url);
     }
+    // Ensure hover state clears immediately when target becomes None
     cx.notify();
 }
 ```
@@ -366,12 +370,24 @@ open = "5.0"  # For cross-platform URL launching
 fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
     let theme = cx.theme();
 
-    if let Some(tab) = self.tabs.get(self.active_tab) {
+    // Use active workspace tab set (per-workspace terminals)
+    let tabs = self
+        .tabs_by_workspace
+        .get(&self.active_workspace_id)
+        .map_or(&[], |tabs| tabs.as_slice());
+    let active_tab_index = *self
+        .active_tab_by_workspace
+        .get(&self.active_workspace_id)
+        .unwrap_or(&0);
+
+    if let Some(tab) = tabs.get(active_tab_index) {
         let terminal = tab.terminal.read(cx);
         let content = terminal.last_content();
 
         // Get hovered URL for display
-        let hovered_url = content.last_hovered_word.as_ref()
+        let hovered_url = content
+            .last_hovered_word
+            .as_ref()
             .map(|hw| hw.word.clone());
 
         // Simple text rendering (existing code)
@@ -420,9 +436,19 @@ fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
 ```rust
 fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     // Check if hovering over a URL
-    let hovering_url = self.tabs.get(self.active_tab)
+    let hovering_url = self
+        .tabs_by_workspace
+        .get(&self.active_workspace_id)
+        .and_then(|tabs| {
+            let idx = *self
+                .active_tab_by_workspace
+                .get(&self.active_workspace_id)
+                .unwrap_or(&0);
+            tabs.get(idx)
+        })
         .and_then(|tab| {
-            tab.terminal.read(cx)
+            tab.terminal
+                .read(cx)
                 .last_content()
                 .last_hovered_word
                 .as_ref()
