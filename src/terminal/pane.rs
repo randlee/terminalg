@@ -16,6 +16,15 @@ use util::shell::Shell;
 
 use crate::terminal::tab::TerminalTab;
 
+/// Default regex patterns for detecting file paths in terminal output.
+/// Note: These can be noisy. Consider gating behind a setting if false positives are an issue.
+const DEFAULT_PATH_REGEXES: &[&str] = &[
+    // File paths with optional line:col
+    r"[a-zA-Z0-9._\-~/]+/[a-zA-Z0-9._\-~/]+(?::\d+)?(?::\d+)?",
+    // Common source file extensions
+    r"[\w\-/\.]+\.(?:rs|js|ts|py|go|java|c|cpp|h|md|txt)",
+];
+
 /// Events emitted by the terminal pane
 #[derive(Clone, Debug)]
 pub enum TerminalPaneEvent {
@@ -71,6 +80,12 @@ impl TerminalPane {
         // Clone working_directory for the async closure
         let working_dir = working_directory.clone();
 
+        // Prepare path hyperlink regex patterns
+        let path_hyperlink_regexes: Vec<String> = DEFAULT_PATH_REGEXES
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+
         // Spawn terminal asynchronously
         let terminal_task: Task<anyhow::Result<TerminalBuilder>> = TerminalBuilder::new(
             working_directory,
@@ -80,7 +95,7 @@ impl TerminalPane {
             cursor_shape,
             alternate_scroll,
             max_scroll_history,
-            Vec::new(), // path_hyperlink_regexes
+            path_hyperlink_regexes, // Use configured patterns
             500,        // path_hyperlink_timeout_ms
             false,      // is_remote_terminal
             window_id,
