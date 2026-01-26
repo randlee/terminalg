@@ -10,7 +10,9 @@ use gpui::{
 };
 use settings::Settings;
 use std::path::PathBuf;
-use terminal::{terminal_settings::TerminalSettings, Event as TerminalEvent, Terminal, TerminalBuilder};
+use terminal::{
+    terminal_settings::TerminalSettings, Event as TerminalEvent, Terminal, TerminalBuilder,
+};
 use theme::ActiveTheme;
 use util::shell::Shell;
 
@@ -84,6 +86,8 @@ impl TerminalPane {
 
         // Clone working_directory and workspace_id for the async closure
         let workspace_key = workspace_id.clone();
+        self.working_directory_by_workspace
+            .insert(workspace_id, working_directory.clone());
         let working_dir = working_directory.clone();
 
         // Spawn terminal asynchronously
@@ -113,9 +117,8 @@ impl TerminalPane {
                         let terminal = cx.new(|cx| builder.subscribe(cx));
 
                         // Subscribe to terminal events
-                        let subscription = cx.subscribe(
-                            &terminal,
-                            |pane: &mut Self, terminal, event, cx| {
+                        let subscription =
+                            cx.subscribe(&terminal, |pane: &mut Self, terminal, event, cx| {
                                 pane.handle_terminal_event(&terminal, event, cx);
                             });
 
@@ -174,11 +177,12 @@ impl TerminalPane {
         working_directory: Option<PathBuf>,
         cx: &mut Context<Self>,
     ) {
-        self.active_workspace_id = workspace_id.clone();
+        self.active_workspace_id.clone_from(&workspace_id);
         self.working_directory_by_workspace
             .insert(workspace_id.clone(), working_directory.clone());
         if !self.tabs_by_workspace.contains_key(&workspace_id) {
-            self.tabs_by_workspace.insert(workspace_id.clone(), Vec::new());
+            self.tabs_by_workspace
+                .insert(workspace_id.clone(), Vec::new());
         }
         if !self.active_tab_by_workspace.contains_key(&workspace_id) {
             self.active_tab_by_workspace.insert(workspace_id.clone(), 0);
@@ -186,7 +190,7 @@ impl TerminalPane {
         let is_empty = self
             .tabs_by_workspace
             .get(&workspace_id)
-            .is_some_and(|tabs| tabs.is_empty());
+            .is_some_and(Vec::is_empty);
         if is_empty {
             self.spawn_terminal(workspace_id, working_directory, cx);
         } else {
@@ -200,7 +204,9 @@ impl TerminalPane {
         self.tabs_by_workspace
             .get(&self.active_workspace_id)
             .and_then(|tabs| {
-                let index = self.active_tab_by_workspace.get(&self.active_workspace_id)?;
+                let index = self
+                    .active_tab_by_workspace
+                    .get(&self.active_workspace_id)?;
                 tabs.get(*index)
             })
     }
@@ -217,9 +223,8 @@ impl TerminalPane {
 
     /// Switch to a specific tab
     pub fn switch_tab(&mut self, index: usize, cx: &mut Context<Self>) {
-        let tabs = match self.tabs_by_workspace.get(&self.active_workspace_id) {
-            Some(tabs) => tabs,
-            None => return,
+        let Some(tabs) = self.tabs_by_workspace.get(&self.active_workspace_id) else {
+            return;
         };
         if index < tabs.len() {
             self.active_tab_by_workspace
@@ -231,9 +236,7 @@ impl TerminalPane {
     /// Close the active tab
     #[allow(dead_code)]
     pub fn close_active_tab(&mut self, cx: &mut Context<Self>) {
-        let terminal_id = self
-            .active_tab()
-            .map(|tab| tab.terminal.entity_id());
+        let terminal_id = self.active_tab().map(|tab| tab.terminal.entity_id());
         if let Some(terminal_id) = terminal_id {
             self.close_terminal_by_id(terminal_id, cx);
         }

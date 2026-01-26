@@ -69,8 +69,7 @@ impl WorkspaceView {
         // Create terminal pane with workspace root as working directory
         let working_directory = Some(config_store.workspace_root().to_path_buf());
         let workspace_id = config_store.active_workspace().id.clone();
-        let terminal_pane =
-            cx.new(|cx| TerminalPane::new(workspace_id, working_directory, cx));
+        let terminal_pane = cx.new(|cx| TerminalPane::new(workspace_id, working_directory, cx));
 
         // Subscribe to terminal pane events
         let terminal_subscription = cx.subscribe(&terminal_pane, |_this, _pane, event, cx| {
