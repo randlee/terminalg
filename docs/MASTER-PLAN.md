@@ -1,8 +1,8 @@
 # TerminalG Master Plan
 
-**Version:** 1.2
+**Version:** 1.3
 **Last Updated:** 2026-01-25
-**Current Phase:** Phase 2 (Sprint 2.2 complete - PR #14 pending)
+**Current Phase:** Phase 2 (Sprint 2.2 complete - PR #14 merged)
 **Dependency Strategy:** See `docs/architecture/zed-reuse-strategy.md`
 **License:** GPL-3.0-or-later (required by Zed crate dependencies)
 
@@ -189,7 +189,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 - [x] Create `src/theme_adapter.rs` - theme initialization
 - [x] Update `src/main.rs` with Zed system initialization
 - [x] Update WorkspaceView to use `cx.theme()` colors
-- [x] All 60 tests passing
+- [x] All 63 tests passing
 - [x] App launches with Zed theme colors
 
 **Files Created:**
@@ -210,7 +210,9 @@ Development organized into 5 phases, each containing sprints that can be execute
 - [x] Keystroke-to-terminal input conversion
 - [x] Multiple terminal tabs with tab bar UI
 - [x] Terminal event handling (title changes, close, wakeup, bell)
-- [x] All 60 tests passing, clippy clean
+- [x] Per-workspace terminal sessions (terminals persist across workspace switches)
+- [x] All 63 tests passing, clippy clean
+- [x] CI passing on all platforms (macOS, Linux, Windows)
 
 **Files Created:**
 - `src/terminal/pane.rs` (~360 lines)
@@ -517,7 +519,7 @@ Phase 5 (Markdown Editor - MVP)
 
 #### Phase 2: Zed Terminal Integration (In Progress)
 
-**Session 5:** 2026-01-25 (~6 hours)
+**Session 5:** 2026-01-25 (~8 hours)
 
 **Sprint 2.1:** Zed Dependencies & Settings/Theme Migration ✅
 - Added Zed crates as git dependencies (terminal, settings, theme, ui, util, collections)
@@ -525,20 +527,22 @@ Phase 5 (Markdown Editor - MVP)
 - Created `src/theme_adapter.rs` - Zed theme initialization
 - Updated `src/main.rs` with Zed system init sequence
 - WorkspaceView now uses `cx.theme()` for colors
-- 60/60 tests passing
+- 63/63 tests passing
 
 **Sprint 2.2:** Terminal Pane Integration ✅
-- Created `src/terminal/pane.rs` (~360 lines) - TerminalPane wrapping Zed Terminal
-- Created `src/terminal/tab.rs` (~70 lines) - TerminalTab state management
+- Created `src/terminal/pane.rs` (~460 lines) - TerminalPane wrapping Zed Terminal
+- Created `src/terminal/tab.rs` (~75 lines) - TerminalTab state management
 - Integrated TerminalPane into WorkspaceView
 - Terminal spawns with PTY, renders content, accepts keyboard input
 - Multiple terminal tabs with tab bar UI
-- 60/60 tests passing, clippy clean
-- PR #14: https://github.com/randlee/terminalg/pull/14
+- Per-workspace terminal sessions using `HashMap<String, Vec<TerminalTab>>`
+- `set_active_workspace()` method for workspace switching with lazy terminal loading
+- 63/63 tests passing, clippy clean, CI green on all platforms
+- PR #14: https://github.com/randlee/terminalg/pull/14 (merged)
 
 ### In Progress
 
-**Phase 2:** Sprint 2.2 complete, PR #14 pending CI/review
+**Phase 2:** Sprint 2.2 complete, PR #14 merged
 - Sprint 2.3 (URL Recognition) not yet started
 - Can proceed to Phase 3 in parallel if desired
 
