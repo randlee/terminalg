@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.93"
 authors = ["Your Name"]
 description = "GPU-accelerated terminal UI with integrated artifact viewing and test execution"
-license = "MIT OR Apache-2.0"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/yourusername/terminalg"
 keywords = ["terminal", "gpu", "ui", "gpui", "artifacts"]
 categories = ["command-line-utilities", "development-tools"]
@@ -24,16 +24,26 @@ cargo = { level = "warn", priority = -1 }
 multiple_crate_versions = "allow"
 
 [dependencies]
-# UI Framework (Phase 1.4)
+# UI Framework (Apache-2.0)
 gpui = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
 
-# Async Runtime (Phase 1.4)
+# Zed Infrastructure (GPL-3.0) - Required for terminal integration
+settings = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+theme = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+
+# Zed Terminal (GPL-3.0) - Core terminal emulation
+terminal = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+
+# Zed UI Components (GPL-3.0)
+ui = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+
+# Zed Utilities (Apache-2.0)
+collections = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+util = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+
+# Async Runtime
 smol = "2.0"
 futures = "0.3"
-
-# Terminal (Phase 2)
-# alacritty_terminal = "0.12"
-# pty = "0.2"
 
 # Configuration & Settings
 serde = { version = "1.0", features = ["derive"] }

@@ -129,6 +129,7 @@ impl TerminalGApp {
 
 **Responsibilities:**
 - Workspace-level tab management (top tabs)
+- Lazy-load workspaces (only active workspace fully initializes; others on first switch)
 - Three-pane layout management
 - Pane visibility controls (hide/show buttons)
 - Terminal tab management (bottom of terminal pane)
@@ -194,6 +195,7 @@ struct WorkspaceView {
 - Shell integration
 - Working directory tracking
 - **NEW: URL recognition and clicking**
+- Terminal sessions persist only while the app is running (no PTY restore on restart)
 
 **Critical Integration:**
 

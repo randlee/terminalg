@@ -2,15 +2,24 @@
 //!
 //! Implements workspace tab bar and three-pane layout with configurable visibility.
 
-use crate::theme::Theme;
+use crate::terminal::{TerminalPane, TerminalPaneEvent};
 use crate::ui::workspace_config::WorkspaceConfigStore;
-use gpui::{div, prelude::*, px, rgb, ElementId, IntoElement, Render, Styled, Task, Window};
+use gpui::{
+    div, prelude::*, px, ElementId, Entity, IntoElement, Render, Styled, Subscription, Task, Window,
+};
 use std::time::Duration;
+use theme::ActiveTheme;
 
 /// Main workspace view with tab bar and three-pane layout
 pub struct WorkspaceView {
     /// Workspace configuration store
     config_store: WorkspaceConfigStore,
+
+    /// Terminal pane entity
+    terminal_pane: Entity<TerminalPane>,
+
+    /// Subscription to terminal pane events
+    _terminal_subscription: Subscription,
 
     /// Debounce timer for auto-save (task handle)
     save_task: Option<Task<()>>,
@@ -26,7 +35,7 @@ pub enum PaneType {
 
 impl WorkspaceView {
     /// Create new workspace view, loading config from disk
-    pub fn new(_cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let config_store = WorkspaceConfigStore::new().unwrap_or_else(|e| {
             tracing::error!("Failed to load workspace config: {}, using defaults", e);
             // Fallback: create a temporary config store with defaults
@@ -57,8 +66,28 @@ impl WorkspaceView {
             );
         }
 
+        // Create terminal pane with workspace root as working directory
+        let working_directory = Some(config_store.workspace_root().to_path_buf());
+        let terminal_pane = cx.new(|cx| TerminalPane::new(working_directory, cx));
+
+        // Subscribe to terminal pane events
+        let terminal_subscription = cx.subscribe(&terminal_pane, |_this, _pane, event, cx| {
+            match event {
+                TerminalPaneEvent::TitleChanged => {
+                    tracing::debug!("Terminal title changed");
+                    cx.notify();
+                }
+                TerminalPaneEvent::Close => {
+                    tracing::info!("Terminal pane closed");
+                    // Could handle workspace-level terminal close logic here
+                }
+            }
+        });
+
         Self {
             config_store,
+            terminal_pane,
+            _terminal_subscription: terminal_subscription,
             save_task: None,
         }
     }
@@ -116,28 +145,18 @@ impl WorkspaceView {
 
     /// Render workspace tab bar
     fn render_tab_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.global::<Theme>();
+        let theme = cx.theme();
         let workspaces = &self.config_store.config().workspaces;
         let active_idx = self.config_store.config().active_workspace_index;
-
-        // Tab bar background color (slightly lighter than main bg)
-        let tab_bar_bg = rgb(u32::from(theme.background.r.saturating_add(10)) << 16
-            | u32::from(theme.background.g.saturating_add(10)) << 8
-            | u32::from(theme.background.b.saturating_add(10)));
-
-        // Border color
-        let border_color = rgb(u32::from(theme.text_muted.r) << 16
-            | u32::from(theme.text_muted.g) << 8
-            | u32::from(theme.text_muted.b));
 
         div()
             .h(px(40.0))
             .w_full()
             .flex()
             .items_center()
-            .bg(tab_bar_bg)
+            .bg(theme.colors().tab_bar_background)
             .border_b_1()
-            .border_color(border_color)
+            .border_color(theme.colors().border)
             .children(
                 workspaces
                     .iter()
@@ -156,22 +175,7 @@ impl WorkspaceView {
         is_active: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let theme = cx.global::<Theme>();
-
-        // Active tab colors (accent color)
-        let active_bg = rgb(u32::from(theme.accent.r) << 16
-            | u32::from(theme.accent.g) << 8
-            | u32::from(theme.accent.b));
-
-        // Inactive tab colors (slightly lighter than bg)
-        let inactive_bg = rgb(u32::from(theme.background.r.saturating_add(20)) << 16
-            | u32::from(theme.background.g.saturating_add(20)) << 8
-            | u32::from(theme.background.b.saturating_add(20)));
-
-        // Text color
-        let text_color = rgb(u32::from(theme.foreground.r) << 16
-            | u32::from(theme.foreground.g) << 8
-            | u32::from(theme.foreground.b));
+        let theme = cx.theme();
 
         div()
             .id(ElementId::NamedInteger(
@@ -183,9 +187,9 @@ impl WorkspaceView {
             .mx_1()
             .rounded_md()
             .cursor_pointer()
-            .when(is_active, |d| d.bg(active_bg))
-            .when(!is_active, |d| d.bg(inactive_bg))
-            .text_color(text_color)
+            .when(is_active, |d| d.bg(theme.colors().tab_active_background))
+            .when(!is_active, |d| d.bg(theme.colors().tab_inactive_background))
+            .text_color(theme.colors().text)
             .child(name.to_string())
             .on_click(cx.listener(move |this, _, _window, cx| {
                 this.switch_workspace(index, cx);
@@ -211,21 +215,47 @@ impl WorkspaceView {
             })
     }
 
-    /// Render a single placeholder pane
-    #[allow(clippy::unreadable_literal)] // Color hex codes are more readable without separators
+    /// Render a single pane (terminal uses real component, others are placeholders)
     fn render_pane(&self, pane_type: PaneType, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.global::<Theme>();
+        let theme = cx.theme();
 
-        let (label, pane_bg) = match pane_type {
-            PaneType::FileBrowser => ("File Browser", rgb(0x2D4A6E)),
-            PaneType::Terminal => ("Terminal", rgb(0x3A3A3A)),
-            PaneType::DocumentViewer => ("Document Viewer", rgb(0x4A2D6E)),
+        // Terminal pane renders the actual TerminalPane component
+        if pane_type == PaneType::Terminal {
+            return div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .m_2()
+                .bg(theme.colors().panel_background)
+                .rounded_md()
+                .overflow_hidden()
+                .child(
+                    div()
+                        .flex()
+                        .justify_between()
+                        .items_center()
+                        .px_3()
+                        .py_2()
+                        .border_b_1()
+                        .border_color(theme.colors().border)
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.colors().text)
+                                .child("Terminal"),
+                        )
+                        .child(self.render_hide_button(pane_type, cx)),
+                )
+                .child(self.terminal_pane.clone());
+        }
+
+        // Other panes render placeholders
+        let label = match pane_type {
+            PaneType::FileBrowser => "File Browser",
+            PaneType::Terminal => unreachable!(),
+            PaneType::DocumentViewer => "Document Viewer",
         };
-
-        // Text color
-        let text_color = rgb(u32::from(theme.foreground.r) << 16
-            | u32::from(theme.foreground.g) << 8
-            | u32::from(theme.foreground.b));
 
         div()
             .flex_1()
@@ -233,9 +263,9 @@ impl WorkspaceView {
             .flex_col()
             .m_2()
             .p_3()
-            .bg(pane_bg)
+            .bg(theme.colors().panel_background)
             .rounded_md()
-            .text_color(text_color)
+            .text_color(theme.colors().text)
             .child(
                 div()
                     .flex()
@@ -262,11 +292,9 @@ impl WorkspaceView {
 
     /// Render hide button for a pane
     #[allow(clippy::unused_self)] // Required for method chaining in render
-    #[allow(clippy::unreadable_literal)] // Color hex codes are more readable without separators
     #[allow(clippy::needless_pass_by_ref_mut)] // cx.listener requires &mut Context
     fn render_hide_button(&self, pane_type: PaneType, cx: &mut Context<Self>) -> impl IntoElement {
-        let button_bg = rgb(0x555555);
-        let button_hover_bg = rgb(0x666666);
+        let theme = cx.theme();
 
         div()
             .id(ElementId::NamedInteger(
@@ -276,8 +304,8 @@ impl WorkspaceView {
             .px_3()
             .py_1()
             .cursor_pointer()
-            .bg(button_bg)
-            .hover(|s| s.bg(button_hover_bg))
+            .bg(theme.colors().element_background)
+            .hover(|s| s.bg(theme.colors().element_hover))
             .rounded_sm()
             .text_sm()
             .child("Hide")
@@ -289,18 +317,13 @@ impl WorkspaceView {
 
 impl Render for WorkspaceView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.global::<Theme>();
-
-        // Background color
-        let bg_color = rgb(u32::from(theme.background.r) << 16
-            | u32::from(theme.background.g) << 8
-            | u32::from(theme.background.b));
+        let theme = cx.theme();
 
         div()
             .flex()
             .flex_col()
             .size_full()
-            .bg(bg_color)
+            .bg(theme.colors().background)
             .child(self.render_tab_bar(cx))
             .child(self.render_content(cx))
     }
