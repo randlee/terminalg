@@ -437,8 +437,8 @@ impl TerminalPane {
                     .active_tab_by_workspace
                     .entry(workspace_id.clone())
                     .or_insert(0);
-                if *active_index >= tabs.len() && !tabs.is_empty() {
-                    *active_index = tabs.len() - 1;
+                if let Some(new_index) = clamp_active_index(*active_index, tabs.len()) {
+                    *active_index = new_index;
                 }
                 if tabs.is_empty() && workspace_id == self.active_workspace_id {
                     cx.emit(TerminalPaneEvent::Close);
@@ -446,5 +446,35 @@ impl TerminalPane {
                 cx.notify();
             }
         }
+    }
+}
+
+fn clamp_active_index(active_index: usize, len: usize) -> Option<usize> {
+    if len == 0 {
+        None
+    } else {
+        Some(active_index.min(len.saturating_sub(1)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_active_index;
+
+    #[test]
+    fn clamp_active_index_handles_empty() {
+        assert_eq!(clamp_active_index(0, 0), None);
+        assert_eq!(clamp_active_index(3, 0), None);
+    }
+
+    #[test]
+    fn clamp_active_index_within_bounds() {
+        assert_eq!(clamp_active_index(0, 1), Some(0));
+        assert_eq!(clamp_active_index(2, 5), Some(2));
+    }
+
+    #[test]
+    fn clamp_active_index_out_of_bounds() {
+        assert_eq!(clamp_active_index(5, 2), Some(1));
     }
 }
