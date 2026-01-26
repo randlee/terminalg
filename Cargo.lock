@@ -6092,6 +6092,7 @@ dependencies = [
  "futures",
  "gpui",
  "notify 6.1.1",
+ "open",
  "serde",
  "serde_json",
  "settings",

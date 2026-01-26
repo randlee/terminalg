@@ -6,11 +6,15 @@
 use collections::HashMap;
 use gpui::{
     div, prelude::*, px, App, Context, EventEmitter, FocusHandle, Focusable, IntoElement,
-    KeyDownEvent, Render, Styled, Subscription, Task, Window,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled,
+    Subscription, Task, Window,
 };
 use settings::Settings;
 use std::path::PathBuf;
-use terminal::{terminal_settings::TerminalSettings, Event as TerminalEvent, TerminalBuilder};
+use terminal::{
+    terminal_settings::TerminalSettings, Event as TerminalEvent, MaybeNavigationTarget,
+    TerminalBuilder,
+};
 use theme::ActiveTheme;
 use util::shell::Shell;
 
@@ -161,8 +165,53 @@ impl TerminalPane {
                 // Could play a sound or flash the window
                 tracing::debug!("Terminal bell");
             }
+            // Handle URL open events
+            TerminalEvent::Open(target) => {
+                self.handle_open_target(target, cx);
+            }
+            // Handle hover state changes
+            TerminalEvent::NewNavigationTarget(target) => {
+                self.handle_navigation_target(target, cx);
+            }
             _ => {}
         }
+    }
+
+    /// Handle opening a URL or path
+    #[allow(clippy::needless_pass_by_ref_mut)] // Called from event handler context
+    #[allow(clippy::unused_self)] // Method signature required by event handler pattern
+    fn handle_open_target(&mut self, target: &MaybeNavigationTarget, _cx: &mut Context<Self>) {
+        match target {
+            MaybeNavigationTarget::Url(url) => {
+                tracing::info!("Opening URL: {}", url);
+                if let Err(e) = open::that(url) {
+                    tracing::error!("Failed to open URL {}: {}", url, e);
+                }
+            }
+            MaybeNavigationTarget::PathLike(path_target) => {
+                // Future: implement path navigation
+                tracing::info!(
+                    "Path navigation requested: {:?}",
+                    path_target.maybe_path
+                );
+            }
+        }
+    }
+
+    /// Handle navigation target hover state changes
+    #[allow(clippy::needless_pass_by_ref_mut)] // Called from event handler context
+    #[allow(clippy::unused_self)] // Method signature required by event handler pattern
+    #[allow(clippy::ref_option)] // API signature from Zed terminal crate
+    fn handle_navigation_target(
+        &mut self,
+        target: &Option<MaybeNavigationTarget>,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(MaybeNavigationTarget::Url(url)) = target {
+            tracing::debug!("Hovering URL: {}", url);
+        }
+        // Ensure hover state clears immediately when target becomes None
+        cx.notify();
     }
 
     /// Get the active terminal tab
@@ -214,6 +263,51 @@ impl TerminalPane {
                 });
                 cx.notify();
             }
+        }
+    }
+
+    /// Handle mouse move events - forwards to Zed terminal for hyperlink detection
+    fn handle_mouse_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(tab) = self.active_tab_mut() {
+            tab.terminal.update(cx, |terminal, cx| {
+                terminal.mouse_move(event, cx);
+            });
+            cx.notify();
+        }
+    }
+
+    /// Handle mouse down events - forwards to Zed terminal
+    fn handle_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(tab) = self.active_tab_mut() {
+            tab.terminal.update(cx, |terminal, cx| {
+                terminal.mouse_down(event, cx);
+            });
+            cx.notify();
+        }
+    }
+
+    /// Handle mouse up events - forwards to Zed terminal for URL opening
+    fn handle_mouse_up(
+        &mut self,
+        event: &MouseUpEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(tab) = self.active_tab_mut() {
+            tab.terminal.update(cx, |terminal, cx| {
+                terminal.mouse_up(event, cx);
+            });
+            cx.notify();
         }
     }
 
@@ -345,6 +439,9 @@ impl Render for TerminalPane {
             .flex_col()
             .size_full()
             .on_key_down(cx.listener(Self::handle_key_down))
+            .on_mouse_move(cx.listener(Self::handle_mouse_move))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
             .child(self.render_terminal_content(cx))
             .child(self.render_tabs(cx))
     }
