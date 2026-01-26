@@ -100,8 +100,8 @@ impl TerminalPane {
             alternate_scroll,
             max_scroll_history,
             path_hyperlink_regexes, // Use configured patterns
-            500,        // path_hyperlink_timeout_ms
-            false,      // is_remote_terminal
+            500,                    // path_hyperlink_timeout_ms
+            false,                  // is_remote_terminal
             window_id,
             None, // completion_tx
             cx,
@@ -190,10 +190,7 @@ impl TerminalPane {
             }
             MaybeNavigationTarget::PathLike(path_target) => {
                 // Future: implement path navigation
-                tracing::info!(
-                    "Path navigation requested: {:?}",
-                    path_target.maybe_path
-                );
+                tracing::info!("Path navigation requested: {:?}", path_target.maybe_path);
             }
         }
     }
