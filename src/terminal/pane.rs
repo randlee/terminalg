@@ -13,7 +13,7 @@ use settings::Settings;
 use std::path::PathBuf;
 use terminal::{
     terminal_settings::TerminalSettings, Event as TerminalEvent, MaybeNavigationTarget, Terminal,
-    TerminalBuilder,
+    TerminalBuilder, TerminalContent,
 };
 use theme::ActiveTheme;
 use util::shell::Shell;
@@ -139,7 +139,11 @@ impl TerminalPane {
                                 pane.handle_terminal_event(&terminal, event, cx);
                             });
 
-                        let tab = TerminalTab::new(terminal.clone(), working_dir, subscription, cx);
+                        let content = terminal.read(cx).last_content();
+                        let rendered_lines = build_lines_from_content(content);
+                        let mut tab =
+                            TerminalTab::new(terminal.clone(), working_dir, subscription, cx);
+                        tab.set_rendered_lines(rendered_lines);
 
                         let tabs = pane
                             .tabs_by_workspace
@@ -170,6 +174,7 @@ impl TerminalPane {
     ) {
         match event {
             TerminalEvent::TitleChanged | TerminalEvent::BreadcrumbsChanged => {
+                self.update_terminal_snapshot(terminal, cx);
                 cx.emit(TerminalPaneEvent::TitleChanged);
                 cx.notify();
             }
@@ -177,6 +182,7 @@ impl TerminalPane {
                 self.close_terminal_by_id(terminal.entity_id(), cx);
             }
             TerminalEvent::Wakeup => {
+                self.update_terminal_snapshot(terminal, cx);
                 cx.notify();
             }
             TerminalEvent::Bell => {
@@ -458,48 +464,34 @@ impl TerminalPane {
             .unwrap_or(&0);
 
         if let Some(tab) = tabs.get(active_tab_index) {
-            let terminal = tab.terminal.read(cx);
-            let content = terminal.last_content();
-
-            // Simple text rendering of terminal content
-            let mut lines: Vec<String> = Vec::new();
-            let mut current_line = String::new();
-            let mut current_row = 0i32;
-
-            for cell in &content.cells {
-                if cell.point.line.0 != current_row {
-                    if !current_line.is_empty() || current_row < cell.point.line.0 {
-                        lines.push(std::mem::take(&mut current_line));
-                    }
-                    // Fill empty lines
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-                    while (lines.len() as i32) < cell.point.line.0 {
-                        lines.push(String::new());
-                    }
-                    current_row = cell.point.line.0;
-                }
-                current_line.push(cell.c);
+            if let Some(lines) = tab.rendered_lines() {
+                div()
+                    .flex_1()
+                    .w_full()
+                    .bg(theme.colors().terminal_background)
+                    .text_color(theme.colors().terminal_foreground)
+                    .font_family("Menlo")
+                    .text_sm()
+                    .p_2()
+                    .overflow_hidden()
+                    .children(lines.iter().cloned().map(|line| {
+                        div().child(if line.is_empty() {
+                            " ".to_string()
+                        } else {
+                            line
+                        })
+                    }))
+            } else {
+                div()
+                    .flex_1()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(theme.colors().terminal_background)
+                    .text_color(theme.colors().text_muted)
+                    .child("Starting terminal...")
             }
-            if !current_line.is_empty() {
-                lines.push(current_line);
-            }
-
-            div()
-                .flex_1()
-                .w_full()
-                .bg(theme.colors().terminal_background)
-                .text_color(theme.colors().terminal_foreground)
-                .font_family("Menlo")
-                .text_sm()
-                .p_2()
-                .overflow_hidden()
-                .children(lines.into_iter().map(|line| {
-                    div().child(if line.is_empty() {
-                        " ".to_string()
-                    } else {
-                        line
-                    })
-                }))
         } else {
             div()
                 .flex_1()
@@ -539,6 +531,22 @@ impl Render for TerminalPane {
 }
 
 impl TerminalPane {
+    fn update_terminal_snapshot(&mut self, terminal: &Entity<Terminal>, cx: &Context<Self>) {
+        let content = terminal.read(cx).last_content();
+        let lines = build_lines_from_content(content);
+        let terminal_id = terminal.entity_id();
+
+        for tabs in self.tabs_by_workspace.values_mut() {
+            if let Some(tab) = tabs
+                .iter_mut()
+                .find(|tab| tab.matches_terminal(terminal_id))
+            {
+                tab.set_rendered_lines(lines);
+                break;
+            }
+        }
+    }
+
     fn close_terminal_by_id(&mut self, terminal_id: gpui::EntityId, cx: &mut Context<Self>) {
         let mut target: Option<(String, usize)> = None;
         for (workspace_id, tabs) in &self.tabs_by_workspace {
@@ -570,6 +578,32 @@ impl TerminalPane {
     }
 }
 
+fn build_lines_from_content(content: &TerminalContent) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let mut current_line = String::new();
+    let mut current_row = 0i32;
+
+    for cell in &content.cells {
+        if cell.point.line.0 != current_row {
+            if !current_line.is_empty() || current_row < cell.point.line.0 {
+                lines.push(std::mem::take(&mut current_line));
+            }
+            // Fill empty lines
+            #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+            while (lines.len() as i32) < cell.point.line.0 {
+                lines.push(String::new());
+            }
+            current_row = cell.point.line.0;
+        }
+        current_line.push(cell.c);
+    }
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    lines
+}
+
 fn clamp_active_index(active_index: usize, len: usize) -> Option<usize> {
     if len == 0 {
         None
@@ -597,7 +631,10 @@ fn strip_line_col_suffix(path: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{clamp_active_index, strip_line_col_suffix};
+    use super::{build_lines_from_content, clamp_active_index, strip_line_col_suffix};
+    use terminal::alacritty_terminal::index::{Column, Line, Point as AlacPoint};
+    use terminal::alacritty_terminal::term::cell::Cell;
+    use terminal::{IndexedCell, TerminalContent};
 
     #[test]
     fn clamp_active_index_handles_empty() {
@@ -646,5 +683,32 @@ mod tests {
     #[test]
     fn strip_line_col_suffix_non_numeric_tail() {
         assert_eq!(strip_line_col_suffix("/tmp/foo:bar"), "/tmp/foo:bar");
+    }
+
+    #[test]
+    fn build_lines_from_content_inserts_empty_lines() {
+        let content = TerminalContent {
+            cells: vec![
+                IndexedCell {
+                    point: AlacPoint::new(Line(0), Column(0)),
+                    cell: Cell {
+                        c: 'a',
+                        ..Default::default()
+                    },
+                },
+                IndexedCell {
+                    point: AlacPoint::new(Line(2), Column(0)),
+                    cell: Cell {
+                        c: 'b',
+                        ..Default::default()
+                    },
+                },
+            ],
+            ..Default::default()
+        };
+
+        let lines = build_lines_from_content(&content);
+
+        assert_eq!(lines, vec!["a".to_string(), String::new(), "b".to_string()]);
     }
 }
