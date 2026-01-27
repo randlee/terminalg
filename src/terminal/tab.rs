@@ -83,6 +83,7 @@ impl TerminalTab {
     }
 
     /// Get cached rendered lines for this tab.
+    #[allow(dead_code)] // Available for debugging/future use
     pub fn rendered_lines(&self) -> Option<&[String]> {
         self.rendered_lines.as_deref()
     }
