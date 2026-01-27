@@ -348,10 +348,14 @@ impl TerminalPane {
         cx: &mut Context<Self>,
     ) {
         if let Some(tab) = self.active_tab_mut() {
-            tab.terminal.update(cx, |terminal, cx| {
-                terminal.mouse_move(event, cx);
-            });
-            cx.notify();
+            // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
+            let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
+            if has_content {
+                tab.terminal.update(cx, |terminal, cx| {
+                    terminal.mouse_move(event, cx);
+                });
+                cx.notify();
+            }
         }
     }
 
@@ -363,10 +367,14 @@ impl TerminalPane {
         cx: &mut Context<Self>,
     ) {
         if let Some(tab) = self.active_tab_mut() {
-            tab.terminal.update(cx, |terminal, cx| {
-                terminal.mouse_down(event, cx);
-            });
-            cx.notify();
+            // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
+            let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
+            if has_content {
+                tab.terminal.update(cx, |terminal, cx| {
+                    terminal.mouse_down(event, cx);
+                });
+                cx.notify();
+            }
         }
     }
 
@@ -378,10 +386,14 @@ impl TerminalPane {
         cx: &mut Context<Self>,
     ) {
         if let Some(tab) = self.active_tab_mut() {
-            tab.terminal.update(cx, |terminal, cx| {
-                terminal.mouse_up(event, cx);
-            });
-            cx.notify();
+            // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
+            let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
+            if has_content {
+                tab.terminal.update(cx, |terminal, cx| {
+                    terminal.mouse_up(event, cx);
+                });
+                cx.notify();
+            }
         }
     }
 
