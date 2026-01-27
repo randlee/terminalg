@@ -2,7 +2,7 @@
 //!
 //! Each `TerminalTab` represents a single terminal session within the terminal pane.
 
-use gpui::{Context, Entity};
+use gpui::{Context, Entity, EntityId, Subscription};
 use std::path::PathBuf;
 use terminal::Terminal;
 
@@ -10,6 +10,8 @@ use terminal::Terminal;
 pub struct TerminalTab {
     /// The underlying Zed terminal
     pub terminal: Entity<Terminal>,
+    /// Subscription to terminal events
+    _subscription: Subscription,
     /// Working directory for this terminal
     working_directory: Option<PathBuf>,
     /// Custom title (if set by user)
@@ -21,11 +23,13 @@ impl TerminalTab {
     #[allow(clippy::missing_const_for_fn)] // Cannot be const due to generic lifetime bounds
     pub fn new<V: 'static>(
         terminal: Entity<Terminal>,
+        subscription: Subscription,
         working_directory: Option<PathBuf>,
         _cx: &mut Context<V>,
     ) -> Self {
         Self {
             terminal,
+            _subscription: subscription,
             working_directory,
             custom_title: None,
         }
@@ -63,5 +67,10 @@ impl TerminalTab {
     #[allow(dead_code)]
     pub fn set_working_directory(&mut self, dir: Option<PathBuf>) {
         self.working_directory = dir;
+    }
+
+    /// Check if this tab matches a terminal entity ID
+    pub fn matches_terminal(&self, terminal_id: EntityId) -> bool {
+        self.terminal.entity_id() == terminal_id
     }
 }
