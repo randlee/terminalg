@@ -3,6 +3,7 @@
 //! This module provides the terminal pane and tab management for `TerminalG`,
 //! wrapping Zed's terminal crate for PTY management and rendering.
 
+mod element;
 mod pane;
 mod tab;
 

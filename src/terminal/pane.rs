@@ -5,19 +5,20 @@
 
 use collections::HashMap;
 use gpui::{
-    div, point, prelude::*, px, App, Bounds, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    Render, Size, Styled, Task, Window,
+    div, prelude::*, px, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled, Task,
+    Window,
 };
 use settings::Settings;
 use std::path::PathBuf;
 use terminal::{
     terminal_settings::TerminalSettings, Event as TerminalEvent, MaybeNavigationTarget, Terminal,
-    TerminalBounds, TerminalBuilder, TerminalContent,
+    TerminalBuilder, TerminalContent,
 };
 use theme::ActiveTheme;
 use util::shell::Shell;
 
+use crate::terminal::element::TerminalElement;
 use crate::terminal::tab::TerminalTab;
 
 /// Default regex patterns for detecting file paths in terminal output.
@@ -471,6 +472,7 @@ impl TerminalPane {
     /// Render the terminal content area
     #[allow(clippy::needless_pass_by_ref_mut)] // GPUI read requires context
     #[allow(clippy::option_if_let_else)] // if-let is more readable here
+    /// Render the terminal content area using the custom TerminalElement
     fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
 
@@ -484,34 +486,15 @@ impl TerminalPane {
             .unwrap_or(&0);
 
         if let Some(tab) = tabs.get(active_tab_index) {
-            if let Some(lines) = tab.rendered_lines() {
-                div()
-                    .flex_1()
-                    .w_full()
-                    .bg(theme.colors().terminal_background)
-                    .text_color(theme.colors().terminal_foreground)
-                    .font_family("Menlo")
-                    .text_sm()
-                    .p_2()
-                    .overflow_hidden()
-                    .children(lines.iter().cloned().map(|line| {
-                        div().child(if line.is_empty() {
-                            " ".to_string()
-                        } else {
-                            line
-                        })
-                    }))
-            } else {
-                div()
-                    .flex_1()
-                    .w_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .bg(theme.colors().terminal_background)
-                    .text_color(theme.colors().text_muted)
-                    .child("Starting terminal...")
-            }
+            // Use the custom TerminalElement for proper sizing
+            div()
+                .flex_1()
+                .w_full()
+                .overflow_hidden()
+                .child(TerminalElement::new(
+                    tab.terminal.clone(),
+                    ("terminal-content", active_tab_index),
+                ))
         } else {
             div()
                 .flex_1()
@@ -535,36 +518,7 @@ impl Focusable for TerminalPane {
 }
 
 impl Render for TerminalPane {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Sync terminal with current size - this is necessary for the PTY to produce output
-        // Use reasonable defaults for monospace font metrics
-        let cell_width = px(8.4);
-        let line_height = px(18.0);
-        let terminal_bounds = TerminalBounds::new(
-            line_height,
-            cell_width,
-            Bounds {
-                origin: point(Pixels::ZERO, Pixels::ZERO),
-                size: Size {
-                    width: px(800.0),
-                    height: px(400.0),
-                },
-            },
-        );
-
-        // Set size and sync for active terminal to process any pending events
-        if let Some(tab) = self.active_tab_mut() {
-            tab.terminal.update(cx, |terminal, cx| {
-                terminal.set_size(terminal_bounds);
-                terminal.sync(window, cx);
-            });
-
-            // Update cached content after sync
-            let content = tab.terminal.read(cx).last_content();
-            let lines = build_lines_from_content(content);
-            tab.set_rendered_lines(lines);
-        }
-
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .track_focus(&self.focus_handle)
             .flex()
