@@ -2,7 +2,7 @@
 //!
 //! Each `TerminalTab` represents a single terminal session within the terminal pane.
 
-use gpui::{Context, Entity, Subscription};
+use gpui::{Context, Entity, EntityId, Subscription};
 use std::path::PathBuf;
 use terminal::Terminal;
 
@@ -67,5 +67,10 @@ impl TerminalTab {
     #[allow(dead_code)]
     pub fn set_working_directory(&mut self, dir: Option<PathBuf>) {
         self.working_directory = dir;
+    }
+
+    /// Check if this tab matches a terminal entity ID
+    pub fn matches_terminal(&self, terminal_id: EntityId) -> bool {
+        self.terminal.entity_id() == terminal_id
     }
 }
