@@ -6,17 +6,28 @@
 use collections::HashMap;
 use gpui::{
     div, prelude::*, px, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-    KeyDownEvent, Render, Styled, Task, Window,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled, Task,
+    Window,
 };
 use settings::Settings;
 use std::path::PathBuf;
 use terminal::{
-    terminal_settings::TerminalSettings, Event as TerminalEvent, Terminal, TerminalBuilder,
+    terminal_settings::TerminalSettings, Event as TerminalEvent, MaybeNavigationTarget, Terminal,
+    TerminalBuilder,
 };
 use theme::ActiveTheme;
 use util::shell::Shell;
 
 use crate::terminal::tab::TerminalTab;
+
+/// Default regex patterns for detecting file paths in terminal output.
+/// Note: These can be noisy. Consider gating behind a setting if false positives are an issue.
+const DEFAULT_PATH_REGEXES: &[&str] = &[
+    // File paths with optional line:col
+    r"[a-zA-Z0-9._\-~/]+/[a-zA-Z0-9._\-~/]+(?::\d+)?(?::\d+)?",
+    // Common source file extensions
+    r"[\w\-/\.]+\.(?:rs|js|ts|py|go|java|c|cpp|h|md|txt)",
+];
 
 /// Events emitted by the terminal pane
 #[derive(Clone, Debug)]
@@ -90,6 +101,12 @@ impl TerminalPane {
             .insert(workspace_id, working_directory.clone());
         let working_dir = working_directory.clone();
 
+        // Prepare path hyperlink regex patterns
+        let path_hyperlink_regexes: Vec<String> = DEFAULT_PATH_REGEXES
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+
         // Spawn terminal asynchronously
         let terminal_task: Task<anyhow::Result<TerminalBuilder>> = TerminalBuilder::new(
             working_directory,
@@ -99,9 +116,9 @@ impl TerminalPane {
             cursor_shape,
             alternate_scroll,
             max_scroll_history,
-            Vec::new(), // path_hyperlink_regexes
-            500,        // path_hyperlink_timeout_ms
-            false,      // is_remote_terminal
+            path_hyperlink_regexes, // Use configured patterns
+            500,                    // path_hyperlink_timeout_ms
+            false,                  // is_remote_terminal
             window_id,
             None, // completion_tx
             cx,
@@ -122,7 +139,7 @@ impl TerminalPane {
                                 pane.handle_terminal_event(&terminal, event, cx);
                             });
 
-                        let tab = TerminalTab::new(terminal.clone(), subscription, working_dir, cx);
+                        let tab = TerminalTab::new(terminal.clone(), working_dir, subscription, cx);
 
                         let tabs = pane
                             .tabs_by_workspace
@@ -166,8 +183,64 @@ impl TerminalPane {
                 // Could play a sound or flash the window
                 tracing::debug!("Terminal bell");
             }
+            // Handle URL open events
+            TerminalEvent::Open(target) => {
+                self.handle_open_target(target, cx);
+            }
+            // Handle hover state changes
+            TerminalEvent::NewNavigationTarget(target) => {
+                self.handle_navigation_target(target, cx);
+            }
             _ => {}
         }
+    }
+
+    /// Handle opening a URL or path
+    #[allow(clippy::needless_pass_by_ref_mut)] // Called from event handler context
+    #[allow(clippy::unused_self)] // Method signature required by event handler pattern
+    fn handle_open_target(&mut self, target: &MaybeNavigationTarget, _cx: &mut Context<Self>) {
+        match target {
+            MaybeNavigationTarget::Url(url) => {
+                tracing::info!("Opening URL: {}", url);
+                if let Err(e) = open::that(url) {
+                    tracing::error!("Failed to open URL {}: {}", url, e);
+                }
+            }
+            MaybeNavigationTarget::PathLike(path_target) => {
+                let base_path = strip_line_col_suffix(&path_target.maybe_path);
+                let path = std::path::Path::new(base_path);
+
+                // Resolve relative paths using terminal's working directory
+                let full_path = if path.is_absolute() {
+                    path.to_path_buf()
+                } else if let Some(terminal_dir) = &path_target.terminal_dir {
+                    terminal_dir.join(path)
+                } else {
+                    path.to_path_buf()
+                };
+
+                tracing::info!("Opening path: {:?}", full_path);
+                if let Err(e) = open::that(&full_path) {
+                    tracing::error!("Failed to open path {:?}: {}", full_path, e);
+                }
+            }
+        }
+    }
+
+    /// Handle navigation target hover state changes
+    #[allow(clippy::needless_pass_by_ref_mut)] // Called from event handler context
+    #[allow(clippy::unused_self)] // Method signature required by event handler pattern
+    #[allow(clippy::ref_option)] // API signature from Zed terminal crate
+    fn handle_navigation_target(
+        &mut self,
+        target: &Option<MaybeNavigationTarget>,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(MaybeNavigationTarget::Url(url)) = target {
+            tracing::debug!("Hovering URL: {}", url);
+        }
+        // Ensure hover state clears immediately when target becomes None
+        cx.notify();
     }
 
     /// Switch to a specific workspace (lazy-loads terminals on first switch)
@@ -256,6 +329,51 @@ impl TerminalPane {
                 if handled {
                     cx.stop_propagation();
                 }
+            });
+            cx.notify();
+        }
+    }
+
+    /// Handle mouse move events - forwards to Zed terminal for hyperlink detection
+    fn handle_mouse_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(tab) = self.active_tab_mut() {
+            tab.terminal.update(cx, |terminal, cx| {
+                terminal.mouse_move(event, cx);
+            });
+            cx.notify();
+        }
+    }
+
+    /// Handle mouse down events - forwards to Zed terminal
+    fn handle_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(tab) = self.active_tab_mut() {
+            tab.terminal.update(cx, |terminal, cx| {
+                terminal.mouse_down(event, cx);
+            });
+            cx.notify();
+        }
+    }
+
+    /// Handle mouse up events - forwards to Zed terminal for URL opening
+    fn handle_mouse_up(
+        &mut self,
+        event: &MouseUpEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(tab) = self.active_tab_mut() {
+            tab.terminal.update(cx, |terminal, cx| {
+                terminal.mouse_up(event, cx);
             });
             cx.notify();
         }
@@ -412,6 +530,9 @@ impl Render for TerminalPane {
             .flex_col()
             .size_full()
             .on_key_down(cx.listener(Self::handle_key_down))
+            .on_mouse_move(cx.listener(Self::handle_mouse_move))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
             .child(self.render_terminal_content(cx))
             .child(self.render_tabs(cx))
     }
@@ -457,9 +578,26 @@ fn clamp_active_index(active_index: usize, len: usize) -> Option<usize> {
     }
 }
 
+fn strip_line_col_suffix(path: &str) -> &str {
+    let Some((head, tail)) = path.rsplit_once(':') else {
+        return path;
+    };
+    if !tail.chars().all(|c| c.is_ascii_digit()) {
+        return path;
+    }
+    let Some((head2, tail2)) = head.rsplit_once(':') else {
+        return head;
+    };
+    if tail2.chars().all(|c| c.is_ascii_digit()) {
+        head2
+    } else {
+        head
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::clamp_active_index;
+    use super::{clamp_active_index, strip_line_col_suffix};
 
     #[test]
     fn clamp_active_index_handles_empty() {
@@ -476,5 +614,37 @@ mod tests {
     #[test]
     fn clamp_active_index_out_of_bounds() {
         assert_eq!(clamp_active_index(5, 2), Some(1));
+    }
+
+    #[test]
+    fn strip_line_col_suffix_no_suffix() {
+        assert_eq!(strip_line_col_suffix("src/main.rs"), "src/main.rs");
+    }
+
+    #[test]
+    fn strip_line_col_suffix_line_only() {
+        assert_eq!(strip_line_col_suffix("src/main.rs:12"), "src/main.rs");
+    }
+
+    #[test]
+    fn strip_line_col_suffix_line_col() {
+        assert_eq!(strip_line_col_suffix("src/main.rs:12:5"), "src/main.rs");
+    }
+
+    #[test]
+    fn strip_line_col_suffix_windows_drive() {
+        assert_eq!(
+            strip_line_col_suffix("C:\\path\\file.rs"),
+            "C:\\path\\file.rs"
+        );
+        assert_eq!(
+            strip_line_col_suffix("C:\\path\\file.rs:12:3"),
+            "C:\\path\\file.rs"
+        );
+    }
+
+    #[test]
+    fn strip_line_col_suffix_non_numeric_tail() {
+        assert_eq!(strip_line_col_suffix("/tmp/foo:bar"), "/tmp/foo:bar");
     }
 }

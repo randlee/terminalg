@@ -10,28 +10,28 @@ use terminal::Terminal;
 pub struct TerminalTab {
     /// The underlying Zed terminal
     pub terminal: Entity<Terminal>,
-    /// Subscription to terminal events
-    _subscription: Subscription,
     /// Working directory for this terminal
     working_directory: Option<PathBuf>,
     /// Custom title (if set by user)
     custom_title: Option<String>,
+    /// Subscription to terminal events (automatically dropped when tab is dropped)
+    _subscription: Subscription,
 }
 
 impl TerminalTab {
-    /// Create a new terminal tab
+    /// Create a new terminal tab with its event subscription
     #[allow(clippy::missing_const_for_fn)] // Cannot be const due to generic lifetime bounds
     pub fn new<V: 'static>(
         terminal: Entity<Terminal>,
-        subscription: Subscription,
         working_directory: Option<PathBuf>,
+        subscription: Subscription,
         _cx: &mut Context<V>,
     ) -> Self {
         Self {
             terminal,
-            _subscription: subscription,
             working_directory,
             custom_title: None,
+            _subscription: subscription,
         }
     }
 

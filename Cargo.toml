@@ -57,6 +57,9 @@ thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
+# URL launching (for hyperlink support)
+open = "5.0"
+
 # Markdown & Text (Phase 3)
 # pulldown-cmark = "0.9"
 # rope = "0.1"
