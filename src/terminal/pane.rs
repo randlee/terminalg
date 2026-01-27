@@ -117,8 +117,8 @@ impl TerminalPane {
             alternate_scroll,
             max_scroll_history,
             path_hyperlink_regexes, // Use configured patterns
-            500,        // path_hyperlink_timeout_ms
-            false,      // is_remote_terminal
+            500,                    // path_hyperlink_timeout_ms
+            false,                  // is_remote_terminal
             window_id,
             None, // completion_tx
             cx,
@@ -139,7 +139,7 @@ impl TerminalPane {
                                 pane.handle_terminal_event(&terminal, event, cx);
                             });
 
-                        let tab = TerminalTab::new(terminal.clone(), subscription, working_dir, cx);
+                        let tab = TerminalTab::new(terminal.clone(), working_dir, subscription, cx);
 
                         let tabs = pane
                             .tabs_by_workspace
@@ -207,13 +207,7 @@ impl TerminalPane {
                 }
             }
             MaybeNavigationTarget::PathLike(path_target) => {
-                // Strip optional :line:col suffix (open::that can't use it)
-                let base_path = path_target
-                    .maybe_path
-                    .split(':')
-                    .next()
-                    .unwrap_or(&path_target.maybe_path);
-
+                let base_path = strip_line_col_suffix(&path_target.maybe_path);
                 let path = std::path::Path::new(base_path);
 
                 // Resolve relative paths using terminal's working directory
@@ -584,9 +578,26 @@ fn clamp_active_index(active_index: usize, len: usize) -> Option<usize> {
     }
 }
 
+fn strip_line_col_suffix(path: &str) -> &str {
+    let Some((head, tail)) = path.rsplit_once(':') else {
+        return path;
+    };
+    if !tail.chars().all(|c| c.is_ascii_digit()) {
+        return path;
+    }
+    let Some((head2, tail2)) = head.rsplit_once(':') else {
+        return head;
+    };
+    if tail2.chars().all(|c| c.is_ascii_digit()) {
+        head2
+    } else {
+        head
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::clamp_active_index;
+    use super::{clamp_active_index, strip_line_col_suffix};
 
     #[test]
     fn clamp_active_index_handles_empty() {
@@ -603,5 +614,37 @@ mod tests {
     #[test]
     fn clamp_active_index_out_of_bounds() {
         assert_eq!(clamp_active_index(5, 2), Some(1));
+    }
+
+    #[test]
+    fn strip_line_col_suffix_no_suffix() {
+        assert_eq!(strip_line_col_suffix("src/main.rs"), "src/main.rs");
+    }
+
+    #[test]
+    fn strip_line_col_suffix_line_only() {
+        assert_eq!(strip_line_col_suffix("src/main.rs:12"), "src/main.rs");
+    }
+
+    #[test]
+    fn strip_line_col_suffix_line_col() {
+        assert_eq!(strip_line_col_suffix("src/main.rs:12:5"), "src/main.rs");
+    }
+
+    #[test]
+    fn strip_line_col_suffix_windows_drive() {
+        assert_eq!(
+            strip_line_col_suffix("C:\\path\\file.rs"),
+            "C:\\path\\file.rs"
+        );
+        assert_eq!(
+            strip_line_col_suffix("C:\\path\\file.rs:12:3"),
+            "C:\\path\\file.rs"
+        );
+    }
+
+    #[test]
+    fn strip_line_col_suffix_non_numeric_tail() {
+        assert_eq!(strip_line_col_suffix("/tmp/foo:bar"), "/tmp/foo:bar");
     }
 }
