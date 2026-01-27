@@ -10,8 +10,6 @@ use terminal::Terminal;
 pub struct TerminalTab {
     /// The underlying Zed terminal
     pub terminal: Entity<Terminal>,
-    /// Cached terminal output lines for render
-    rendered_lines: Option<Vec<String>>,
     /// Working directory for this terminal
     working_directory: Option<PathBuf>,
     /// Custom title (if set by user)
@@ -31,7 +29,6 @@ impl TerminalTab {
     ) -> Self {
         Self {
             terminal,
-            rendered_lines: None,
             working_directory,
             custom_title: None,
             _subscription: subscription,
@@ -75,16 +72,5 @@ impl TerminalTab {
     /// Check if this tab matches a terminal entity ID
     pub fn matches_terminal(&self, terminal_id: EntityId) -> bool {
         self.terminal.entity_id() == terminal_id
-    }
-
-    /// Update cached rendered lines for this tab.
-    pub fn set_rendered_lines(&mut self, lines: Vec<String>) {
-        self.rendered_lines = Some(lines);
-    }
-
-    /// Get cached rendered lines for this tab.
-    #[allow(dead_code)] // Available for debugging/future use
-    pub fn rendered_lines(&self) -> Option<&[String]> {
-        self.rendered_lines.as_deref()
     }
 }

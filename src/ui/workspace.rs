@@ -5,10 +5,26 @@
 use crate::terminal::{TerminalPane, TerminalPaneEvent};
 use crate::ui::workspace_config::WorkspaceConfigStore;
 use gpui::{
-    div, prelude::*, px, ElementId, Entity, IntoElement, Render, Styled, Subscription, Task, Window,
+    div, prelude::*, px, relative, ClickEvent, ElementId, Entity, IntoElement, MouseButton,
+    MouseDownEvent, MouseMoveEvent, Pixels, Render, Styled, Subscription, Task, Window,
 };
 use std::time::Duration;
 use theme::ActiveTheme;
+
+/// Minimum width for a pane to prevent narrow/unusable layouts
+const MIN_PANE_WIDTH: Pixels = px(150.0);
+
+/// State tracking for drag-to-resize operations on pane dividers
+struct ResizeDragState {
+    /// Index of the divider being dragged (0 = left divider, 1 = right divider)
+    divider_index: usize,
+    /// Initial X position of the mouse when drag started
+    start_x: Pixels,
+    /// Pane ratios at the start of the drag operation
+    start_ratios: [f32; 3],
+    /// Total available width for all panes at drag start
+    total_width: Pixels,
+}
 
 /// Main workspace view with tab bar and three-pane layout
 pub struct WorkspaceView {
@@ -23,6 +39,9 @@ pub struct WorkspaceView {
 
     /// Debounce timer for auto-save (task handle)
     save_task: Option<Task<()>>,
+
+    /// Active resize drag state (Some when user is dragging a divider)
+    resize_drag_state: Option<ResizeDragState>,
 }
 
 /// Pane type identifier
@@ -90,6 +109,7 @@ impl WorkspaceView {
             terminal_pane,
             _terminal_subscription: terminal_subscription,
             save_task: None,
+            resize_drag_state: None,
         }
     }
 
@@ -157,6 +177,158 @@ impl WorkspaceView {
         }));
     }
 
+    /// Render vertical divider between panes
+    #[allow(clippy::needless_pass_by_ref_mut)] // cx.listener requires &mut Context
+    fn render_divider(&self, divider_index: usize, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_dragging = self
+            .resize_drag_state
+            .as_ref()
+            .is_some_and(|s| s.divider_index == divider_index);
+
+        let theme = cx.theme();
+
+        div()
+            .id(ElementId::NamedInteger(
+                "pane-divider".into(),
+                divider_index as u64,
+            ))
+            .w(px(6.0))
+            .h_full()
+            .cursor_col_resize()
+            .bg(if is_dragging {
+                theme.colors().border_focused
+            } else {
+                theme.colors().border
+            })
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
+                    // Use a placeholder width - will be recalculated during drag
+                    this.start_resize_drag(divider_index, event.position.x, px(1000.0), cx);
+                }),
+            )
+            .on_click(cx.listener(move |this, event: &ClickEvent, _window, cx| {
+                // Double-click to reset ratios
+                if let ClickEvent::Mouse(mouse_event) = event {
+                    if mouse_event.up.click_count == 2 {
+                        this.reset_pane_ratios(cx);
+                    }
+                }
+            }))
+    }
+
+    /// Start drag-to-resize operation on a divider
+    fn start_resize_drag(
+        &mut self,
+        divider_index: usize,
+        start_x: Pixels,
+        total_width: Pixels,
+        cx: &mut Context<Self>,
+    ) {
+        let ws = self.config_store.active_workspace();
+        self.resize_drag_state = Some(ResizeDragState {
+            divider_index,
+            start_x,
+            start_ratios: ws.pane_ratios,
+            total_width,
+        });
+        cx.notify();
+    }
+
+    /// Handle mouse movement during drag-to-resize
+    fn handle_resize_drag(&mut self, position_x: Pixels, cx: &mut Context<Self>) {
+        if let Some(ref drag_state) = self.resize_drag_state {
+            let delta = position_x - drag_state.start_x;
+            let new_ratios = self.calculate_new_ratios(drag_state, delta);
+
+            let ws = self.config_store.active_workspace_mut();
+            ws.pane_ratios = new_ratios;
+            cx.notify();
+        }
+    }
+
+    /// End drag-to-resize operation and persist changes
+    fn end_resize_drag(&mut self, cx: &mut Context<Self>) {
+        if self.resize_drag_state.take().is_some() {
+            self.schedule_save(cx);
+            cx.notify();
+        }
+    }
+
+    /// Calculate new pane ratios based on drag delta, enforcing minimum widths
+    #[allow(clippy::unused_self)] // Method for consistency with other instance methods
+    fn calculate_new_ratios(&self, drag_state: &ResizeDragState, delta: Pixels) -> [f32; 3] {
+        let total_width = drag_state.total_width;
+        let ratios = drag_state.start_ratios;
+
+        // Calculate total ratio sum for normalization
+        let total_ratio: f32 = ratios.iter().sum();
+
+        // Convert ratios to pixel widths
+        let mut widths = [
+            (ratios[0] / total_ratio) * total_width,
+            (ratios[1] / total_ratio) * total_width,
+            (ratios[2] / total_ratio) * total_width,
+        ];
+
+        // Apply delta to the two panes adjacent to the divider
+        let left_idx = drag_state.divider_index;
+        let right_idx = drag_state.divider_index + 1;
+
+        widths[left_idx] += delta;
+        widths[right_idx] -= delta;
+
+        // Enforce minimum widths
+        if widths[left_idx] < MIN_PANE_WIDTH {
+            let deficit = MIN_PANE_WIDTH - widths[left_idx];
+            widths[left_idx] = MIN_PANE_WIDTH;
+            widths[right_idx] -= deficit;
+        }
+
+        if widths[right_idx] < MIN_PANE_WIDTH {
+            let deficit = MIN_PANE_WIDTH - widths[right_idx];
+            widths[right_idx] = MIN_PANE_WIDTH;
+            widths[left_idx] -= deficit;
+        }
+
+        // Convert back to ratios
+        let total_width_actual = widths[0] + widths[1] + widths[2];
+        [
+            widths[0] / total_width_actual,
+            widths[1] / total_width_actual,
+            widths[2] / total_width_actual,
+        ]
+    }
+
+    /// Reset pane ratios to default [1.0, 2.0, 1.0]
+    fn reset_pane_ratios(&mut self, cx: &mut Context<Self>) {
+        let ws = self.config_store.active_workspace_mut();
+        ws.pane_ratios = [1.0, 2.0, 1.0];
+        self.schedule_save(cx);
+        cx.notify();
+    }
+
+    /// Calculate normalized ratios for only visible panes
+    #[allow(clippy::unused_self)] // Method for consistency with other instance methods
+    fn normalized_visible_ratios(&self, ratios: &[f32; 3], visible: [bool; 3]) -> [f32; 3] {
+        let visible_sum: f32 = ratios
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| visible[*i])
+            .map(|(_, r)| r)
+            .sum();
+
+        if visible_sum == 0.0 {
+            return [0.0, 0.0, 0.0];
+        }
+
+        [
+            if visible[0] { ratios[0] / visible_sum } else { 0.0 },
+            if visible[1] { ratios[1] / visible_sum } else { 0.0 },
+            if visible[2] { ratios[2] / visible_sum } else { 0.0 },
+        ]
+    }
+
     /// Render workspace tab bar
     fn render_tab_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
@@ -210,22 +382,64 @@ impl WorkspaceView {
             }))
     }
 
-    /// Render three-pane content area
+    /// Render three-pane content area with dynamic flex basis and dividers
     fn render_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let ws = self.config_store.active_workspace();
+        let ratios = ws.pane_ratios;
+        let visible = [
+            ws.file_browser_visible,
+            ws.terminal_visible,
+            ws.document_viewer_visible,
+        ];
+
+        // Calculate normalized ratios for visible panes only
+        let visible_ratios = self.normalized_visible_ratios(&ratios, visible);
 
         div()
             .flex()
             .flex_1()
             .w_full()
-            .when(ws.file_browser_visible, |d| {
-                d.child(self.render_pane(PaneType::FileBrowser, cx))
+            // Global mouse event handlers for drag continuation
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _window, cx| {
+                this.handle_resize_drag(event.position.x, cx);
+            }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _event, _window, cx| {
+                    this.end_resize_drag(cx);
+                }),
+            )
+            // File browser
+            .when(visible[0], |d| {
+                d.child(
+                    div()
+                        .flex_basis(relative(visible_ratios[0]))
+                        .child(self.render_pane(PaneType::FileBrowser, cx)),
+                )
             })
-            .when(ws.terminal_visible, |d| {
-                d.child(self.render_pane(PaneType::Terminal, cx))
+            // Divider 0 (between file browser and terminal)
+            .when(visible[0] && visible[1], |d| {
+                d.child(self.render_divider(0, cx))
             })
-            .when(ws.document_viewer_visible, |d| {
-                d.child(self.render_pane(PaneType::DocumentViewer, cx))
+            // Terminal
+            .when(visible[1], |d| {
+                d.child(
+                    div()
+                        .flex_basis(relative(visible_ratios[1]))
+                        .child(self.render_pane(PaneType::Terminal, cx)),
+                )
+            })
+            // Divider 1 (between terminal and doc viewer)
+            .when(visible[1] && visible[2], |d| {
+                d.child(self.render_divider(1, cx))
+            })
+            // Document viewer
+            .when(visible[2], |d| {
+                d.child(
+                    div()
+                        .flex_basis(relative(visible_ratios[2]))
+                        .child(self.render_pane(PaneType::DocumentViewer, cx)),
+                )
             })
     }
 
