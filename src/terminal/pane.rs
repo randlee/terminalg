@@ -18,6 +18,7 @@ use terminal::{
 use theme::ActiveTheme;
 use util::shell::Shell;
 
+use crate::terminal::element::TerminalElement;
 use crate::terminal::tab::TerminalTab;
 
 /// Default regex patterns for detecting file paths in terminal output.
@@ -331,8 +332,13 @@ impl TerminalPane {
         let option_as_meta = TerminalSettings::get_global(cx).option_as_meta;
         if let Some(tab) = self.active_tab_mut() {
             tab.terminal.update(cx, |terminal, cx| {
+                // First try special key handling (ctrl+c, arrows, function keys, etc.)
                 let handled = terminal.try_keystroke(&event.keystroke, option_as_meta);
                 if handled {
+                    cx.stop_propagation();
+                } else if let Some(key_char) = &event.keystroke.key_char {
+                    // For plain text input, send the character directly to the terminal
+                    terminal.input(key_char.as_bytes().to_vec());
                     cx.stop_propagation();
                 }
             });
@@ -359,13 +365,16 @@ impl TerminalPane {
         }
     }
 
-    /// Handle mouse down events - forwards to Zed terminal
+    /// Handle mouse down events - forwards to Zed terminal and captures focus
     fn handle_mouse_down(
         &mut self,
         event: &MouseDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Focus the terminal pane on click
+        self.focus_handle.focus(window, cx);
+
         if let Some(tab) = self.active_tab_mut() {
             // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
             let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
@@ -463,6 +472,7 @@ impl TerminalPane {
     /// Render the terminal content area
     #[allow(clippy::needless_pass_by_ref_mut)] // GPUI read requires context
     #[allow(clippy::option_if_let_else)] // if-let is more readable here
+    /// Render the terminal content area using the custom `TerminalElement`
     fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
 
@@ -476,34 +486,15 @@ impl TerminalPane {
             .unwrap_or(&0);
 
         if let Some(tab) = tabs.get(active_tab_index) {
-            if let Some(lines) = tab.rendered_lines() {
-                div()
-                    .flex_1()
-                    .w_full()
-                    .bg(theme.colors().terminal_background)
-                    .text_color(theme.colors().terminal_foreground)
-                    .font_family("Menlo")
-                    .text_sm()
-                    .p_2()
-                    .overflow_hidden()
-                    .children(lines.iter().cloned().map(|line| {
-                        div().child(if line.is_empty() {
-                            " ".to_string()
-                        } else {
-                            line
-                        })
-                    }))
-            } else {
-                div()
-                    .flex_1()
-                    .w_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .bg(theme.colors().terminal_background)
-                    .text_color(theme.colors().text_muted)
-                    .child("Starting terminal...")
-            }
+            // Use the custom TerminalElement for proper sizing
+            div()
+                .flex_1()
+                .w_full()
+                .overflow_hidden()
+                .child(TerminalElement::new(
+                    tab.terminal.clone(),
+                    ("terminal-content", active_tab_index),
+                ))
         } else {
             div()
                 .flex_1()
