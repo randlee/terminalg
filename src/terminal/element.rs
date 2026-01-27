@@ -181,8 +181,19 @@ impl Element for TerminalElement {
             .map(|advance| advance.width)
             .unwrap_or(px(8.4)); // Fallback
 
-        // Create terminal bounds from actual layout bounds
-        let dimensions = TerminalBounds::new(line_height, cell_width, bounds);
+        // Guard against narrow widths that cause alacritty to misbehave
+        // See: https://github.com/zed-industries/zed/issues/2750
+        let mut size = bounds.size;
+        if size.width < cell_width * 2.0 {
+            size.width = cell_width * 2.0;
+        }
+        let clamped_bounds = Bounds {
+            origin: bounds.origin,
+            size,
+        };
+
+        // Create terminal bounds from clamped layout bounds
+        let dimensions = TerminalBounds::new(line_height, cell_width, clamped_bounds);
 
         // Set terminal size and sync to populate cells
         self.terminal.update(cx, |terminal, cx| {
