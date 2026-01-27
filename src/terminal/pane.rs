@@ -5,14 +5,14 @@
 
 use collections::HashMap;
 use gpui::{
-    div, prelude::*, px, App, Context, EventEmitter, FocusHandle, Focusable, IntoElement,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled,
-    Subscription, Task, Window,
+    div, prelude::*, px, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled, Task,
+    Window,
 };
 use settings::Settings;
 use std::path::PathBuf;
 use terminal::{
-    terminal_settings::TerminalSettings, Event as TerminalEvent, MaybeNavigationTarget,
+    terminal_settings::TerminalSettings, Event as TerminalEvent, MaybeNavigationTarget, Terminal,
     TerminalBuilder,
 };
 use theme::ActiveTheme;
@@ -46,8 +46,6 @@ pub struct TerminalPane {
     active_tab: usize,
     /// Focus handle for keyboard input
     focus_handle: FocusHandle,
-    /// Subscriptions to terminal events
-    subscriptions: Vec<Subscription>,
 }
 
 impl TerminalPane {
@@ -58,7 +56,6 @@ impl TerminalPane {
             tabs: Vec::new(),
             active_tab: 0,
             focus_handle,
-            subscriptions: Vec::new(),
         };
 
         // Spawn initial terminal
@@ -116,17 +113,19 @@ impl TerminalPane {
                         // Create the terminal entity and subscribe to events
                         let terminal = cx.new(|cx| builder.subscribe(cx));
 
-                        let tab = TerminalTab::new(terminal.clone(), working_dir, cx);
+                        // Subscribe to terminal events - pass terminal entity to handler
+                        let subscription = cx.subscribe(
+                            &terminal,
+                            |pane: &mut Self, terminal: Entity<Terminal>, event, cx| {
+                                pane.handle_terminal_event(&terminal, event, cx);
+                            },
+                        );
 
-                        // Subscribe to terminal events
-                        let subscription =
-                            cx.subscribe(&terminal, |pane: &mut Self, _terminal, event, cx| {
-                                pane.handle_terminal_event(event, cx);
-                            });
+                        // Create tab with subscription (subscription moves into tab, auto-dropped when tab removed)
+                        let tab = TerminalTab::new(terminal.clone(), working_dir, subscription, cx);
 
                         pane.tabs.push(tab);
                         pane.active_tab = pane.tabs.len() - 1;
-                        pane.subscriptions.push(subscription);
                         cx.notify();
                     });
                 }
@@ -139,16 +138,22 @@ impl TerminalPane {
     }
 
     /// Handle terminal events
-    fn handle_terminal_event(&mut self, event: &TerminalEvent, cx: &mut Context<Self>) {
+    fn handle_terminal_event(
+        &mut self,
+        terminal: &Entity<Terminal>,
+        event: &TerminalEvent,
+        cx: &mut Context<Self>,
+    ) {
         match event {
             TerminalEvent::TitleChanged | TerminalEvent::BreadcrumbsChanged => {
                 cx.emit(TerminalPaneEvent::TitleChanged);
                 cx.notify();
             }
             TerminalEvent::CloseTerminal => {
-                // Remove the active terminal tab
-                if !self.tabs.is_empty() {
-                    self.tabs.remove(self.active_tab);
+                // Find the tab that owns this terminal and remove it (not just active tab)
+                if let Some(idx) = self.tabs.iter().position(|tab| &tab.terminal == terminal) {
+                    self.tabs.remove(idx);
+                    // Adjust active_tab if needed
                     if self.active_tab >= self.tabs.len() && !self.tabs.is_empty() {
                         self.active_tab = self.tabs.len() - 1;
                     }
@@ -189,8 +194,28 @@ impl TerminalPane {
                 }
             }
             MaybeNavigationTarget::PathLike(path_target) => {
-                // Future: implement path navigation
-                tracing::info!("Path navigation requested: {:?}", path_target.maybe_path);
+                // Strip optional :line:col suffix (open::that can't use it)
+                let base_path = path_target
+                    .maybe_path
+                    .split(':')
+                    .next()
+                    .unwrap_or(&path_target.maybe_path);
+
+                let path = std::path::Path::new(base_path);
+
+                // Resolve relative paths using terminal's working directory
+                let full_path = if path.is_absolute() {
+                    path.to_path_buf()
+                } else if let Some(terminal_dir) = &path_target.terminal_dir {
+                    terminal_dir.join(path)
+                } else {
+                    path.to_path_buf()
+                };
+
+                tracing::info!("Opening path: {:?}", full_path);
+                if let Err(e) = open::that(&full_path) {
+                    tracing::error!("Failed to open path {:?}: {}", full_path, e);
+                }
             }
         }
     }

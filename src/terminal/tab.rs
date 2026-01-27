@@ -2,7 +2,7 @@
 //!
 //! Each `TerminalTab` represents a single terminal session within the terminal pane.
 
-use gpui::{Context, Entity};
+use gpui::{Context, Entity, Subscription};
 use std::path::PathBuf;
 use terminal::Terminal;
 
@@ -14,20 +14,24 @@ pub struct TerminalTab {
     working_directory: Option<PathBuf>,
     /// Custom title (if set by user)
     custom_title: Option<String>,
+    /// Subscription to terminal events (automatically dropped when tab is dropped)
+    _subscription: Subscription,
 }
 
 impl TerminalTab {
-    /// Create a new terminal tab
+    /// Create a new terminal tab with its event subscription
     #[allow(clippy::missing_const_for_fn)] // Cannot be const due to generic lifetime bounds
     pub fn new<V: 'static>(
         terminal: Entity<Terminal>,
         working_directory: Option<PathBuf>,
+        subscription: Subscription,
         _cx: &mut Context<V>,
     ) -> Self {
         Self {
             terminal,
             working_directory,
             custom_title: None,
+            _subscription: subscription,
         }
     }
 
