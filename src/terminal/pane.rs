@@ -5,15 +5,15 @@
 
 use collections::HashMap;
 use gpui::{
-    div, prelude::*, px, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled, Task,
-    Window,
+    div, point, prelude::*, px, App, Bounds, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
+    Render, Size, Styled, Task, Window,
 };
 use settings::Settings;
 use std::path::PathBuf;
 use terminal::{
     terminal_settings::TerminalSettings, Event as TerminalEvent, MaybeNavigationTarget, Terminal,
-    TerminalBuilder, TerminalContent,
+    TerminalBounds, TerminalBuilder, TerminalContent,
 };
 use theme::ActiveTheme;
 use util::shell::Shell;
@@ -331,8 +331,13 @@ impl TerminalPane {
         let option_as_meta = TerminalSettings::get_global(cx).option_as_meta;
         if let Some(tab) = self.active_tab_mut() {
             tab.terminal.update(cx, |terminal, cx| {
+                // First try special key handling (ctrl+c, arrows, function keys, etc.)
                 let handled = terminal.try_keystroke(&event.keystroke, option_as_meta);
                 if handled {
+                    cx.stop_propagation();
+                } else if let Some(key_char) = &event.keystroke.key_char {
+                    // For plain text input, send the character directly to the terminal
+                    terminal.input(key_char.as_bytes().to_vec());
                     cx.stop_propagation();
                 }
             });
@@ -359,13 +364,16 @@ impl TerminalPane {
         }
     }
 
-    /// Handle mouse down events - forwards to Zed terminal
+    /// Handle mouse down events - forwards to Zed terminal and captures focus
     fn handle_mouse_down(
         &mut self,
         event: &MouseDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Focus the terminal pane on click
+        self.focus_handle.focus(window, cx);
+
         if let Some(tab) = self.active_tab_mut() {
             // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
             let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
@@ -527,7 +535,36 @@ impl Focusable for TerminalPane {
 }
 
 impl Render for TerminalPane {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Sync terminal with current size - this is necessary for the PTY to produce output
+        // Use reasonable defaults for monospace font metrics
+        let cell_width = px(8.4);
+        let line_height = px(18.0);
+        let terminal_bounds = TerminalBounds::new(
+            line_height,
+            cell_width,
+            Bounds {
+                origin: point(Pixels::ZERO, Pixels::ZERO),
+                size: Size {
+                    width: px(800.0),
+                    height: px(400.0),
+                },
+            },
+        );
+
+        // Set size and sync for active terminal to process any pending events
+        if let Some(tab) = self.active_tab_mut() {
+            tab.terminal.update(cx, |terminal, cx| {
+                terminal.set_size(terminal_bounds);
+                terminal.sync(window, cx);
+            });
+
+            // Update cached content after sync
+            let content = tab.terminal.read(cx).last_content();
+            let lines = build_lines_from_content(content);
+            tab.set_rendered_lines(lines);
+        }
+
         div()
             .track_focus(&self.focus_handle)
             .flex()
