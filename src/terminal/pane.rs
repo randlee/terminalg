@@ -140,8 +140,7 @@ impl TerminalPane {
                                 pane.handle_terminal_event(&terminal, event, cx);
                             });
 
-                        let tab =
-                            TerminalTab::new(terminal.clone(), working_dir, subscription, cx);
+                        let tab = TerminalTab::new(terminal.clone(), working_dir, subscription, cx);
 
                         let tabs = pane
                             .tabs_by_workspace

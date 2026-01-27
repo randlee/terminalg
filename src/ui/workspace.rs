@@ -5,16 +5,19 @@
 use crate::terminal::{TerminalPane, TerminalPaneEvent};
 use crate::ui::workspace_config::WorkspaceConfigStore;
 use gpui::{
-    div, prelude::*, px, relative, ClickEvent, ElementId, Entity, IntoElement, MouseButton,
-    MouseDownEvent, MouseMoveEvent, Pixels, Render, Styled, Subscription, Task, Window,
+    div, prelude::*, px, relative, App, Bounds, ClickEvent, Element, ElementId, Entity,
+    GlobalElementId, IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels,
+    Render, Size, Style, Styled, Subscription, Task, WeakEntity, Window,
 };
 use std::time::Duration;
 use theme::ActiveTheme;
 
 /// Minimum width for a pane to prevent narrow/unusable layouts
 const MIN_PANE_WIDTH: Pixels = px(150.0);
+const DIVIDER_WIDTH: Pixels = px(6.0);
 
 /// State tracking for drag-to-resize operations on pane dividers
+#[derive(Clone, Copy)]
 struct ResizeDragState {
     /// Index of the divider being dragged (0 = left divider, 1 = right divider)
     divider_index: usize,
@@ -24,6 +27,89 @@ struct ResizeDragState {
     start_ratios: [f32; 3],
     /// Total available width for all panes at drag start
     total_width: Pixels,
+}
+
+/// Element that captures the bounds of its layout and reports width to the workspace view.
+struct ContentBoundsReporter {
+    target: WeakEntity<WorkspaceView>,
+    id: ElementId,
+}
+
+impl ContentBoundsReporter {
+    fn new(target: WeakEntity<WorkspaceView>, id: impl Into<ElementId>) -> Self {
+        Self {
+            target,
+            id: id.into(),
+        }
+    }
+}
+
+impl IntoElement for ContentBoundsReporter {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for ContentBoundsReporter {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        Some(self.id.clone())
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _global_id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let style = Style {
+            size: Size {
+                width: gpui::relative(1.).into(),
+                height: gpui::relative(1.).into(),
+            },
+            ..Default::default()
+        };
+        let layout_id = window.request_layout(style, None, cx);
+        (layout_id, ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _global_id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        if let Some(target) = self.target.upgrade() {
+            let width = bounds.size.width;
+            target.update(cx, |view, _cx| {
+                view.content_width = Some(width);
+            });
+        }
+    }
+
+    fn paint(
+        &mut self,
+        _global_id: Option<&GlobalElementId>,
+        _inspector_id: Option<&gpui::InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _layout: &mut Self::PrepaintState,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) {
+    }
 }
 
 /// Main workspace view with tab bar and three-pane layout
@@ -42,6 +128,9 @@ pub struct WorkspaceView {
 
     /// Active resize drag state (Some when user is dragging a divider)
     resize_drag_state: Option<ResizeDragState>,
+
+    /// Last known content width for pane layout calculations
+    content_width: Option<Pixels>,
 }
 
 /// Pane type identifier
@@ -110,6 +199,7 @@ impl WorkspaceView {
             _terminal_subscription: terminal_subscription,
             save_task: None,
             resize_drag_state: None,
+            content_width: None,
         }
     }
 
@@ -179,7 +269,12 @@ impl WorkspaceView {
 
     /// Render vertical divider between panes
     #[allow(clippy::needless_pass_by_ref_mut)] // cx.listener requires &mut Context
-    fn render_divider(&self, divider_index: usize, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_divider(
+        &self,
+        divider_index: usize,
+        total_width: Pixels,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let is_dragging = self
             .resize_drag_state
             .as_ref()
@@ -203,8 +298,7 @@ impl WorkspaceView {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
-                    // Use a placeholder width - will be recalculated during drag
-                    this.start_resize_drag(divider_index, event.position.x, px(1000.0), cx);
+                    this.start_resize_drag(divider_index, event.position.x, total_width, cx);
                 }),
             )
             .on_click(cx.listener(move |this, event: &ClickEvent, _window, cx| {
@@ -226,11 +320,24 @@ impl WorkspaceView {
         cx: &mut Context<Self>,
     ) {
         let ws = self.config_store.active_workspace();
+        let visible = [
+            ws.file_browser_visible,
+            ws.terminal_visible,
+            ws.document_viewer_visible,
+        ];
+        let available_width = if total_width > px(0.0) {
+            total_width
+        } else {
+            self.available_panes_width(visible)
+        };
+        if available_width <= px(0.0) {
+            return;
+        }
         self.resize_drag_state = Some(ResizeDragState {
             divider_index,
             start_x,
             start_ratios: ws.pane_ratios,
-            total_width,
+            total_width: available_width,
         });
         cx.notify();
     }
@@ -238,8 +345,20 @@ impl WorkspaceView {
     /// Handle mouse movement during drag-to-resize
     fn handle_resize_drag(&mut self, position_x: Pixels, cx: &mut Context<Self>) {
         if let Some(ref drag_state) = self.resize_drag_state {
+            let ws = self.config_store.active_workspace();
+            let visible = [
+                ws.file_browser_visible,
+                ws.terminal_visible,
+                ws.document_viewer_visible,
+            ];
+            let available_width = self.available_panes_width(visible);
+            let total_width = if available_width > px(0.0) {
+                available_width
+            } else {
+                drag_state.total_width
+            };
             let delta = position_x - drag_state.start_x;
-            let new_ratios = self.calculate_new_ratios(drag_state, delta);
+            let new_ratios = calculate_new_ratios(drag_state, delta, visible, total_width);
 
             let ws = self.config_store.active_workspace_mut();
             ws.pane_ratios = new_ratios;
@@ -257,49 +376,6 @@ impl WorkspaceView {
 
     /// Calculate new pane ratios based on drag delta, enforcing minimum widths
     #[allow(clippy::unused_self)] // Method for consistency with other instance methods
-    fn calculate_new_ratios(&self, drag_state: &ResizeDragState, delta: Pixels) -> [f32; 3] {
-        let total_width = drag_state.total_width;
-        let ratios = drag_state.start_ratios;
-
-        // Calculate total ratio sum for normalization
-        let total_ratio: f32 = ratios.iter().sum();
-
-        // Convert ratios to pixel widths
-        let mut widths = [
-            (ratios[0] / total_ratio) * total_width,
-            (ratios[1] / total_ratio) * total_width,
-            (ratios[2] / total_ratio) * total_width,
-        ];
-
-        // Apply delta to the two panes adjacent to the divider
-        let left_idx = drag_state.divider_index;
-        let right_idx = drag_state.divider_index + 1;
-
-        widths[left_idx] += delta;
-        widths[right_idx] -= delta;
-
-        // Enforce minimum widths
-        if widths[left_idx] < MIN_PANE_WIDTH {
-            let deficit = MIN_PANE_WIDTH - widths[left_idx];
-            widths[left_idx] = MIN_PANE_WIDTH;
-            widths[right_idx] -= deficit;
-        }
-
-        if widths[right_idx] < MIN_PANE_WIDTH {
-            let deficit = MIN_PANE_WIDTH - widths[right_idx];
-            widths[right_idx] = MIN_PANE_WIDTH;
-            widths[left_idx] -= deficit;
-        }
-
-        // Convert back to ratios
-        let total_width_actual = widths[0] + widths[1] + widths[2];
-        [
-            widths[0] / total_width_actual,
-            widths[1] / total_width_actual,
-            widths[2] / total_width_actual,
-        ]
-    }
-
     /// Reset pane ratios to default [1.0, 2.0, 1.0]
     fn reset_pane_ratios(&mut self, cx: &mut Context<Self>) {
         let ws = self.config_store.active_workspace_mut();
@@ -323,10 +399,42 @@ impl WorkspaceView {
         }
 
         [
-            if visible[0] { ratios[0] / visible_sum } else { 0.0 },
-            if visible[1] { ratios[1] / visible_sum } else { 0.0 },
-            if visible[2] { ratios[2] / visible_sum } else { 0.0 },
+            if visible[0] {
+                ratios[0] / visible_sum
+            } else {
+                0.0
+            },
+            if visible[1] {
+                ratios[1] / visible_sum
+            } else {
+                0.0
+            },
+            if visible[2] {
+                ratios[2] / visible_sum
+            } else {
+                0.0
+            },
         ]
+    }
+
+    fn available_panes_width(&self, visible: [bool; 3]) -> Pixels {
+        let Some(content_width) = self.content_width else {
+            return px(0.0);
+        };
+        let divider_count =
+            usize::from(visible[0] && visible[1]) + usize::from(visible[1] && visible[2]);
+        let divider_factor = match divider_count {
+            0 => 0.0,
+            1 => 1.0,
+            _ => 2.0,
+        };
+        let divider_width = DIVIDER_WIDTH * divider_factor;
+        let available = content_width - divider_width;
+        if available > px(0.0) {
+            available
+        } else {
+            px(0.0)
+        }
     }
 
     /// Render workspace tab bar
@@ -391,6 +499,7 @@ impl WorkspaceView {
             ws.terminal_visible,
             ws.document_viewer_visible,
         ];
+        let available_width = self.available_panes_width(visible);
 
         // Calculate normalized ratios for visible panes only
         let visible_ratios = self.normalized_visible_ratios(&ratios, visible);
@@ -399,11 +508,27 @@ impl WorkspaceView {
             .flex()
             .flex_1()
             .w_full()
+            .relative()
+            .child(
+                div()
+                    .absolute()
+                    .size_full()
+                    .child(ContentBoundsReporter::new(
+                        cx.weak_entity(),
+                        "workspace-content-bounds",
+                    )),
+            )
             // Global mouse event handlers for drag continuation
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _window, cx| {
                 this.handle_resize_drag(event.position.x, cx);
             }))
             .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _event, _window, cx| {
+                    this.end_resize_drag(cx);
+                }),
+            )
+            .on_mouse_up_out(
                 MouseButton::Left,
                 cx.listener(|this, _event, _window, cx| {
                     this.end_resize_drag(cx);
@@ -419,7 +544,7 @@ impl WorkspaceView {
             })
             // Divider 0 (between file browser and terminal)
             .when(visible[0] && visible[1], |d| {
-                d.child(self.render_divider(0, cx))
+                d.child(self.render_divider(0, available_width, cx))
             })
             // Terminal
             .when(visible[1], |d| {
@@ -431,7 +556,7 @@ impl WorkspaceView {
             })
             // Divider 1 (between terminal and doc viewer)
             .when(visible[1] && visible[2], |d| {
-                d.child(self.render_divider(1, cx))
+                d.child(self.render_divider(1, available_width, cx))
             })
             // Document viewer
             .when(visible[2], |d| {
@@ -554,5 +679,166 @@ impl Render for WorkspaceView {
             .bg(theme.colors().background)
             .child(self.render_tab_bar(cx))
             .child(self.render_content(cx))
+    }
+}
+
+fn calculate_new_ratios(
+    drag_state: &ResizeDragState,
+    delta: Pixels,
+    visible: [bool; 3],
+    total_width: Pixels,
+) -> [f32; 3] {
+    let mut ratios = drag_state.start_ratios;
+    let visible_count = visible.iter().filter(|v| **v).count();
+    if visible_count < 2 || total_width <= px(0.0) {
+        return ratios;
+    }
+
+    let visible_factor = match visible_count {
+        0 => 0.0,
+        1 => 1.0,
+        2 => 2.0,
+        _ => 3.0,
+    };
+    let min_total_width = MIN_PANE_WIDTH * visible_factor;
+    if total_width < min_total_width {
+        return ratios;
+    }
+
+    let left_idx = drag_state.divider_index;
+    if left_idx >= 2 {
+        return ratios;
+    }
+    let right_idx = left_idx + 1;
+    if !visible[left_idx] || !visible[right_idx] {
+        return ratios;
+    }
+
+    let hidden_ratio_sum: f32 = ratios
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !visible[*i])
+        .map(|(_, ratio)| *ratio)
+        .sum();
+    let visible_ratio_total = 1.0 - hidden_ratio_sum;
+    if visible_ratio_total <= 0.0 {
+        return ratios;
+    }
+
+    let mut widths = [px(0.0); 3];
+    for (idx, width) in widths.iter_mut().enumerate() {
+        if visible[idx] {
+            *width = (ratios[idx] / visible_ratio_total) * total_width;
+        }
+    }
+
+    widths[left_idx] += delta;
+    widths[right_idx] -= delta;
+
+    let mut left = widths[left_idx];
+    let mut right = widths[right_idx];
+
+    if left < MIN_PANE_WIDTH {
+        let deficit = MIN_PANE_WIDTH - left;
+        left = MIN_PANE_WIDTH;
+        right -= deficit;
+    }
+
+    if right < MIN_PANE_WIDTH {
+        let deficit = MIN_PANE_WIDTH - right;
+        right = MIN_PANE_WIDTH;
+        left -= deficit;
+    }
+
+    if left < MIN_PANE_WIDTH || right < MIN_PANE_WIDTH {
+        return ratios;
+    }
+
+    widths[left_idx] = left;
+    widths[right_idx] = right;
+
+    for (idx, ratio) in ratios.iter_mut().enumerate() {
+        if visible[idx] {
+            *ratio = (widths[idx] / total_width) * visible_ratio_total;
+        }
+    }
+
+    ratios
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{calculate_new_ratios, ResizeDragState};
+    use gpui::px;
+
+    fn assert_approx(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() < 1e-3,
+            "actual={actual} expected={expected}"
+        );
+    }
+
+    #[test]
+    fn calculate_new_ratios_keeps_hidden_pane_ratios() {
+        let drag_state = ResizeDragState {
+            divider_index: 1,
+            start_x: px(0.0),
+            start_ratios: [0.2, 0.4, 0.4],
+            total_width: px(400.0),
+        };
+        let visible = [false, true, true];
+        let result = calculate_new_ratios(&drag_state, px(40.0), visible, px(400.0));
+
+        assert_approx(result[0], 0.2);
+        assert_approx(result[1], 0.48);
+        assert_approx(result[2], 0.32);
+    }
+
+    #[test]
+    fn calculate_new_ratios_returns_original_when_too_narrow() {
+        let drag_state = ResizeDragState {
+            divider_index: 0,
+            start_x: px(0.0),
+            start_ratios: [0.33, 0.33, 0.34],
+            total_width: px(200.0),
+        };
+        let visible = [true, true, true];
+        let result = calculate_new_ratios(&drag_state, px(20.0), visible, px(200.0));
+
+        assert_approx(result[0], 0.33);
+        assert_approx(result[1], 0.33);
+        assert_approx(result[2], 0.34);
+    }
+
+    #[test]
+    fn calculate_new_ratios_clamps_min_widths() {
+        let drag_state = ResizeDragState {
+            divider_index: 0,
+            start_x: px(0.0),
+            start_ratios: [1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0],
+            total_width: px(600.0),
+        };
+        let visible = [true, true, true];
+        let result = calculate_new_ratios(&drag_state, px(80.0), visible, px(600.0));
+
+        assert_approx(result[0], 250.0 / 600.0);
+        assert_approx(result[1], 150.0 / 600.0);
+        assert_approx(result[2], 200.0 / 600.0);
+    }
+
+    #[test]
+    fn calculate_new_ratios_rejects_invalid_clamp() {
+        let drag_state = ResizeDragState {
+            divider_index: 0,
+            start_x: px(0.0),
+            start_ratios: [1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0],
+            total_width: px(300.0),
+        };
+        let visible = [true, true, true];
+        let result = calculate_new_ratios(&drag_state, px(100.0), visible, px(300.0));
+
+        assert_approx(result[0], 1.0 / 3.0);
+        assert_approx(result[1], 1.0 / 3.0);
+        assert_approx(result[2], 1.0 / 3.0);
     }
 }
