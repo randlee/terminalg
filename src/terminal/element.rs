@@ -4,13 +4,13 @@
 //! during the prepaint phase, ensuring the PTY receives correct size information.
 
 use gpui::{
-    px, App, Bounds, Element, ElementId, Entity, Font, FontFeatures, FontStyle,
-    GlobalElementId, Hitbox, HitboxBehavior, Hsla, IntoElement, LayoutId, Pixels, Point,
-    SharedString, Size, Style, TextAlign, TextRun, Window,
+    px, App, Bounds, Element, ElementId, Entity, Font, FontFeatures, FontStyle, GlobalElementId,
+    Hitbox, HitboxBehavior, Hsla, IntoElement, LayoutId, Pixels, Point, SharedString, Size, Style,
+    TextAlign, TextRun, Window,
 };
 use settings::Settings;
-use terminal::{Terminal, TerminalBounds, TerminalContent};
 use terminal::terminal_settings::TerminalSettings;
+use terminal::{Terminal, TerminalBounds, TerminalContent};
 use theme::{ActiveTheme, ThemeSettings};
 
 /// Layout state computed during prepaint
@@ -104,10 +104,14 @@ impl Element for TerminalElement {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         // Request full available space
-        let mut style = Style::default();
-        style.flex_grow = 1.0;
-        style.size.width = gpui::relative(1.).into();
-        style.size.height = gpui::relative(1.).into();
+        let style = Style {
+            flex_grow: 1.0,
+            size: Size {
+                width: gpui::relative(1.).into(),
+                height: gpui::relative(1.).into(),
+            },
+            ..Default::default()
+        };
 
         let layout_id = window.request_layout(style, None, cx);
         (layout_id, ())
@@ -146,9 +150,8 @@ impl Element for TerminalElement {
         // Disable ligatures for terminal (standard practice)
         let font_features = terminal_settings
             .font_features
-            .as_ref()
-            .unwrap_or(&FontFeatures::disable_ligatures())
-            .clone();
+            .clone()
+            .unwrap_or_else(FontFeatures::disable_ligatures);
 
         let font_weight = terminal_settings.font_weight.unwrap_or_default();
 
@@ -164,9 +167,7 @@ impl Element for TerminalElement {
         // Calculate font size - use terminal setting if set, otherwise buffer font size
         let rem_size = window.rem_size();
         let buffer_font_size = settings.buffer_font_size(cx);
-        let font_size = terminal_settings
-            .font_size
-            .unwrap_or(buffer_font_size);
+        let font_size = terminal_settings.font_size.unwrap_or(buffer_font_size);
 
         // Get line height from terminal settings
         let line_height_setting = terminal_settings.line_height.value();
@@ -181,14 +182,7 @@ impl Element for TerminalElement {
             .unwrap_or(px(8.4)); // Fallback
 
         // Create terminal bounds from actual layout bounds
-        let dimensions = TerminalBounds::new(
-            line_height,
-            cell_width,
-            Bounds {
-                origin: bounds.origin,
-                size: bounds.size,
-            },
-        );
+        let dimensions = TerminalBounds::new(line_height, cell_width, bounds);
 
         // Set terminal size and sync to populate cells
         self.terminal.update(cx, |terminal, cx| {
@@ -264,11 +258,22 @@ impl Element for TerminalElement {
                 }],
                 Some(layout.cell_width),
             );
-            shaped_line.paint(position, layout.line_height, TextAlign::Left, None, window, cx).ok();
+            shaped_line
+                .paint(
+                    position,
+                    layout.line_height,
+                    TextAlign::Left,
+                    None,
+                    window,
+                    cx,
+                )
+                .ok();
         }
 
         // Paint cursor (simple block cursor)
-        let cursor_y = bounds.origin.y + layout.line_height * layout.content.cursor_line as usize;
+        #[allow(clippy::cast_sign_loss)] // cursor_line is always non-negative when visible
+        let cursor_y =
+            bounds.origin.y + layout.line_height * layout.content.cursor_line.max(0) as usize;
         let cursor_x = bounds.origin.x + layout.cell_width * layout.content.cursor_col;
 
         if cursor_y >= bounds.origin.y && cursor_y < bounds.origin.y + bounds.size.height {

@@ -472,7 +472,7 @@ impl TerminalPane {
     /// Render the terminal content area
     #[allow(clippy::needless_pass_by_ref_mut)] // GPUI read requires context
     #[allow(clippy::option_if_let_else)] // if-let is more readable here
-    /// Render the terminal content area using the custom TerminalElement
+    /// Render the terminal content area using the custom `TerminalElement`
     fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
 
