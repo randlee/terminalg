@@ -136,7 +136,7 @@ Vec::new(), // path_hyperlink_regexes <- EMPTY!
 
 ### 3.1 Phase 1: URL Regex Configuration (1 hour)
 
-**Objective:** Pass URL patterns to `TerminalBuilder` for path detection.
+**Objective:** Keep URL-only detection enabled and avoid path false positives in Sprint 2.3.
 
 **File:** `src/terminal/pane.rs`
 
@@ -151,15 +151,29 @@ Vec::new(), // path_hyperlink_regexes <- EMPTY!
 
 ---
 
-### 3.2 Phase 2: Mouse Event Wiring (2-3 hours)
+### 3.2 Phase 1.5: API Verification + Coordinate Conversion (1 hour)
 
-**Objective:** Connect GPUI mouse events to Zed's terminal mouse handlers.
+**Objective:** Validate Zed terminal mouse API signatures and required layout context.
+
+**Tasks:**
+1. Verify exact signatures for `Terminal::mouse_move`, `Terminal::mouse_down`, `Terminal::mouse_up` in the pinned Zed version.
+2. Confirm how pixel → grid conversion is handled (e.g., uses `TerminalBounds` from `terminal.set_size()`).
+3. Ensure terminal bounds are set before mouse events (e.g., after layout/paint).
+
+**Testing:**
+- Add temporary logging to confirm `TerminalEvent::NewNavigationTarget` and `TerminalEvent::Open` are emitted when hovering/clicking URLs.
+
+---
+
+### 3.3 Phase 2: Mouse Event Wiring (2-3 hours)
+
+**Objective:** Connect GPUI mouse events to Zed's terminal mouse handlers with correct bounds, button filtering, and focus.
 
 **File:** `src/terminal/pane.rs`
 
 **Changes:**
 
-1. **Add mouse event handlers** (after `handle_key_down()` at line 203):
+1. **Add mouse event handlers** (after `handle_key_down()`):
 
 ```rust
 /// Handle mouse move events
@@ -181,10 +195,12 @@ fn handle_mouse_move(
 fn handle_mouse_down(
     &mut self,
     event: &gpui::MouseDownEvent,
-    _window: &mut Window,
+    window: &mut Window,
     cx: &mut Context<Self>,
 ) {
     if let Some(tab) = self.active_tab_mut() {
+        // Focus the terminal so Ctrl/Cmd+click works even when unfocused
+        self.focus_handle.focus(window, cx);
         tab.terminal.update(cx, |terminal, cx| {
             terminal.mouse_down(event, cx);
         });
@@ -208,27 +224,24 @@ fn handle_mouse_up(
 }
 ```
 
-2. **Wire events to render** (modify `render()` method):
+2. **Wire events to render** (modify `render_terminal_content()` container, not the tab bar parent):
 
 ```rust
-fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
     div()
-        .track_focus(&self.focus_handle)
-        .flex()
-        .flex_col()
-        .size_full()
-        .on_key_down(cx.listener(Self::handle_key_down))
-        .on_mouse_move(cx.listener(Self::handle_mouse_move))  // ADD
-        .on_mouse_down(cx.listener(Self::handle_mouse_down))  // ADD
-        .on_mouse_up(cx.listener(Self::handle_mouse_up))      // ADD
-        .child(self.render_terminal_content(cx))
-        .child(self.render_tabs(cx))
+        .flex_1()
+        .w_full()
+        .on_mouse_move(cx.listener(Self::handle_mouse_move))
+        .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
+        .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
+        .child(/* terminal content */)
 }
 ```
 
 **Testing:**
 - Mouse events logged via `tracing::debug!`
 - Ctrl/Cmd+hover triggers `FindHyperlink` (check logs)
+- Left-click only triggers hyperlink handling (no right-click conflicts)
 - No crashes or panics
 
 ---
@@ -301,11 +314,11 @@ fn handle_navigation_target(
     target: &Option<terminal::MaybeNavigationTarget>,
     cx: &mut Context<Self>,
 ) {
-    // Future: show tooltip or status indicator
-    if let Some(terminal::MaybeNavigationTarget::Url(url)) = target {
-        tracing::debug!("Hovering URL: {}", url);
-    }
-    // Ensure hover state clears immediately when target becomes None
+    // Cache hover state so render does not read from terminal entity
+    self.hovered_url = match target {
+        Some(terminal::MaybeNavigationTarget::Url(url)) => Some(url.clone()),
+        _ => None,
+    };
     cx.notify();
 }
 ```
@@ -334,7 +347,8 @@ open = "5.0"  # For cross-platform URL launching
 - Change cursor to pointer on hover
 - Defer full underline rendering to future sprint
 **Important:** Do NOT read terminal entity state during render. Cache hover state from
-`TerminalEvent::NewNavigationTarget` and render from the cached value.
+`TerminalEvent::NewNavigationTarget` and render from the cached value. If hover state gets stuck,
+clear on modifier release or when `MouseMoveEvent` lacks `modifiers.secondary()`.
 
 **File:** `src/terminal/pane.rs`
 
@@ -515,8 +529,8 @@ fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoE
 ┌──────────────────────────────────────────────────────────────────┐
 │  TerminalPane.handle_terminal_event()                            │
 │  - Call handle_navigation_target()                               │
-│  - Log: "Hovering URL: https://example.com"                     │
-│  - cx.notify() triggers re-render                               │
+│  - Cache hovered URL in TerminalPane                             │
+│  - cx.notify() triggers re-render                                │
 └───────────────┬──────────────────────────────────────────────────┘
                 │
                 │ cx.notify()
@@ -593,13 +607,22 @@ User Action: Ctrl/Cmd + Release
 - [ ] Test: No change to existing behavior
 - [ ] Commit: "feat: keep URL-only hyperlink detection for Sprint 2.3"
 
+### Phase 1.5: API Verification + Coordinate Conversion (1 hour)
+- [ ] Verify `Terminal::mouse_move`, `Terminal::mouse_down`, `Terminal::mouse_up` signatures in pinned Zed
+- [ ] Confirm mouse event handling uses `TerminalBounds` set during layout
+- [ ] Add temporary logging for `Open` and `NewNavigationTarget` events
+- [ ] Commit: "docs: validate terminal mouse API assumptions"
+
 ### Phase 2: Mouse Event Wiring (2-3 hours)
 - [ ] Add `handle_mouse_move()` method
 - [ ] Add `handle_mouse_down()` method
 - [ ] Add `handle_mouse_up()` method
-- [ ] Wire events in `render()` method
+- [ ] Wire mouse handlers on terminal content container (not tab bar parent)
+- [ ] Filter to left mouse button only
+- [ ] Ensure terminal focus on mouse down
 - [ ] Test: Mouse events logged via tracing
 - [ ] Test: Ctrl/Cmd+hover triggers FindHyperlink (check logs)
+- [ ] Test: Tab bar clicks do not trigger hyperlink detection
 - [ ] Test: No crashes or panics
 - [ ] Commit: "feat: wire mouse events to terminal hyperlink detection"
 
@@ -620,7 +643,7 @@ User Action: Ctrl/Cmd + Release
 - [ ] Add cursor pointer style when hovering URL (cached state)
 - [ ] Test: Ctrl/Cmd+hover shows URL at bottom of terminal
 - [ ] Test: Cursor changes to pointer on hover
-- [ ] Test: URL disappears when Ctrl/Cmd released
+- [ ] Test: URL disappears when Ctrl/Cmd released (or on mouse move without modifiers)
 - [ ] Commit: "feat: add visual feedback for URL hover state"
 
 ### Final Integration (1 hour)
