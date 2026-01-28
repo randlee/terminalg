@@ -5,6 +5,7 @@
 **Status:** Design Complete
 **Estimated Duration:** 8-10 hours
 **Target Branch:** `feature/sprint-3-1-file-browser`
+**Worktree Path:** `/Users/randlee/Documents/github/terminalg-worktrees/sprint-3-1-file-browser`
 
 ---
 
