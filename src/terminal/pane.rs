@@ -50,6 +50,8 @@ pub struct TerminalPane {
     working_directory_by_workspace: HashMap<String, Option<PathBuf>>,
     /// Focus handle for keyboard input
     focus_handle: FocusHandle,
+    /// Currently hovered URL (cached from navigation target events)
+    hovered_url: Option<String>,
 }
 
 impl TerminalPane {
@@ -66,6 +68,7 @@ impl TerminalPane {
             active_tab_by_workspace: HashMap::default(),
             working_directory_by_workspace: HashMap::default(),
             focus_handle,
+            hovered_url: None,
         };
 
         // Spawn initial terminal
@@ -235,17 +238,19 @@ impl TerminalPane {
 
     /// Handle navigation target hover state changes
     #[allow(clippy::needless_pass_by_ref_mut)] // Called from event handler context
-    #[allow(clippy::unused_self)] // Method signature required by event handler pattern
     #[allow(clippy::ref_option)] // API signature from Zed terminal crate
     fn handle_navigation_target(
         &mut self,
         target: &Option<MaybeNavigationTarget>,
         cx: &mut Context<Self>,
     ) {
-        if let Some(MaybeNavigationTarget::Url(url)) = target {
-            tracing::debug!("Hovering URL: {}", url);
-        }
-        // Ensure hover state clears immediately when target becomes None
+        self.hovered_url = match target {
+            Some(MaybeNavigationTarget::Url(url)) => {
+                tracing::debug!("Hovering URL: {}", url);
+                Some(url.clone())
+            }
+            _ => None,
+        };
         cx.notify();
     }
 
@@ -453,6 +458,7 @@ impl TerminalPane {
     #[allow(clippy::option_if_let_else)] // if-let is more readable here
     fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let hovered_url = self.hovered_url.clone();
 
         let tabs: &[TerminalTab] = match self.tabs_by_workspace.get(&self.active_workspace_id) {
             Some(tabs) => tabs.as_slice(),
@@ -468,6 +474,7 @@ impl TerminalPane {
                 div()
                     .flex_1()
                     .w_full()
+                    .relative()
                     .bg(theme.colors().terminal_background)
                     .text_color(theme.colors().terminal_foreground)
                     .font_family("Menlo")
@@ -481,6 +488,23 @@ impl TerminalPane {
                             line
                         })
                     }))
+                    .when_some(hovered_url, |d, url| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .bottom_0()
+                                .left_0()
+                                .right_0()
+                                .px_2()
+                                .py_1()
+                                .bg(theme.colors().element_background)
+                                .border_t_1()
+                                .border_color(theme.colors().border)
+                                .text_xs()
+                                .text_color(theme.colors().link_text_hover)
+                                .child(url),
+                        )
+                    })
             } else {
                 div()
                     .flex_1()
@@ -516,11 +540,13 @@ impl Focusable for TerminalPane {
 
 impl Render for TerminalPane {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let hovering_url = self.hovered_url.is_some();
         div()
             .track_focus(&self.focus_handle)
             .flex()
             .flex_col()
             .size_full()
+            .when(hovering_url, gpui::Styled::cursor_pointer)
             .on_key_down(cx.listener(Self::handle_key_down))
             .on_mouse_move(cx.listener(Self::handle_mouse_move))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
@@ -631,7 +657,10 @@ fn strip_line_col_suffix(path: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_lines_from_content, clamp_active_index, strip_line_col_suffix};
+    use super::{
+        build_lines_from_content, clamp_active_index, strip_line_col_suffix, DEFAULT_PATH_REGEXES,
+    };
+    use regex::Regex;
     use terminal::alacritty_terminal::index::{Column, Line, Point as AlacPoint};
     use terminal::alacritty_terminal::term::cell::Cell;
     use terminal::{IndexedCell, TerminalContent};
@@ -710,5 +739,39 @@ mod tests {
         let lines = build_lines_from_content(&content);
 
         assert_eq!(lines, vec!["a".to_string(), String::new(), "b".to_string()]);
+    }
+
+    // URL/Path regex pattern tests
+    #[test]
+    fn path_regex_matches_simple_paths() {
+        let regex = Regex::new(DEFAULT_PATH_REGEXES[0]).unwrap();
+        assert!(regex.is_match("src/main.rs"));
+        assert!(regex.is_match("./foo/bar"));
+        assert!(regex.is_match("/absolute/path/file.txt"));
+    }
+
+    #[test]
+    fn path_regex_matches_paths_with_line_numbers() {
+        let regex = Regex::new(DEFAULT_PATH_REGEXES[0]).unwrap();
+        assert!(regex.is_match("src/main.rs:12"));
+        assert!(regex.is_match("src/main.rs:12:5"));
+    }
+
+    #[test]
+    fn path_regex_matches_source_file_extensions() {
+        let regex = Regex::new(DEFAULT_PATH_REGEXES[1]).unwrap();
+        assert!(regex.is_match("main.rs"));
+        assert!(regex.is_match("script.py"));
+        assert!(regex.is_match("index.js"));
+        assert!(regex.is_match("app.ts"));
+        assert!(regex.is_match("README.md"));
+    }
+
+    #[test]
+    fn path_regex_matches_nested_source_files() {
+        let regex = Regex::new(DEFAULT_PATH_REGEXES[1]).unwrap();
+        assert!(regex.is_match("src/lib.rs"));
+        assert!(regex.is_match("tests/integration/test.py"));
+        assert!(regex.is_match("./relative/path/file.go"));
     }
 }
