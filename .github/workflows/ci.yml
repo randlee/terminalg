@@ -71,6 +71,7 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libwayland-dev \
+            libasound2-dev \
             libvulkan-dev
 
       - name: Check code compiles
@@ -147,6 +148,7 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libwayland-dev \
+            libasound2-dev \
             libvulkan-dev
 
       - name: Run Clippy
