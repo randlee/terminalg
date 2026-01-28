@@ -629,7 +629,7 @@ mod tests {
         ];
 
         let state = FileBrowserRuntimeState {
-            all_entries: all_entries.clone(),
+            all_entries,
             visible_entries: Vec::new(),
             expanded_dir_ids: vec![1], // "src" is expanded
             ..Default::default()
@@ -644,7 +644,7 @@ mod tests {
     fn initial_selection_down_selects_first() {
         // When no selection exists, down arrow should select index 0
         // This verifies the fix for the off-by-one bug
-        let entries = vec![
+        let entries = [
             Entry {
                 id: 1,
                 path: PathBuf::from("first"),
@@ -661,16 +661,8 @@ mod tests {
 
         // With no current selection, down should pick index 0
         let current_index: Option<usize> = None;
-        let new_index = match current_index {
-            Some(idx) => {
-                if idx >= entries.len() - 1 {
-                    0
-                } else {
-                    idx + 1
-                }
-            }
-            None => 0, // This is the bug fix
-        };
+        let new_index =
+            current_index.map_or(0, |idx| if idx >= entries.len() - 1 { 0 } else { idx + 1 });
         assert_eq!(new_index, 0);
         assert_eq!(entries[new_index].id, 1);
     }
@@ -678,7 +670,7 @@ mod tests {
     #[test]
     fn initial_selection_up_selects_last() {
         // When no selection exists, up arrow should select last entry
-        let entries = vec![
+        let entries = [
             Entry {
                 id: 1,
                 path: PathBuf::from("first"),
@@ -695,16 +687,16 @@ mod tests {
 
         // With no current selection, up should pick last entry
         let current_index: Option<usize> = None;
-        let new_index = match current_index {
-            Some(idx) => {
+        let new_index = current_index.map_or_else(
+            || entries.len() - 1,
+            |idx| {
                 if idx == 0 {
                     entries.len() - 1
                 } else {
                     idx - 1
                 }
-            }
-            None => entries.len() - 1, // This is the bug fix
-        };
+            },
+        );
         assert_eq!(new_index, 1);
         assert_eq!(entries[new_index].id, 2);
     }
@@ -713,7 +705,7 @@ mod tests {
     fn collapse_finds_correct_parent_not_later_sibling() {
         // Test that collapse finds parent by scanning backwards from current position,
         // not from end of list (which would find wrong parent)
-        let entries = vec![
+        let entries = [
             Entry {
                 id: 1,
                 path: PathBuf::from("src"),
