@@ -345,13 +345,39 @@ impl TerminalPane {
         }
     }
 
+    /// Check if the active terminal has content (guards against empty terminal panics)
+    fn has_terminal_content(&self) -> bool {
+        self.tabs_by_workspace
+            .get(&self.active_workspace_id)
+            .and_then(|tabs| {
+                let index = self
+                    .active_tab_by_workspace
+                    .get(&self.active_workspace_id)?;
+                tabs.get(*index)
+            })
+            .is_some_and(|tab| tab.rendered_lines().is_some())
+    }
+
     /// Handle mouse move events - forwards to Zed terminal for hyperlink detection
+    /// Only processes events when terminal has content to avoid index panics
     fn handle_mouse_move(
         &mut self,
         event: &MouseMoveEvent,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Guard: skip if terminal has no content
+        if !self.has_terminal_content() {
+            return;
+        }
+
+        // Clear hover state if no modifier key is held (Cmd on macOS, Ctrl on other platforms)
+        // Uses secondary() which is the cross-platform modifier for hyperlink activation
+        if !event.modifiers.secondary() && self.hovered_url.is_some() {
+            self.hovered_url = None;
+            cx.notify();
+        }
+
         if let Some(tab) = self.active_tab_mut() {
             tab.terminal.update(cx, |terminal, cx| {
                 terminal.mouse_move(event, cx);
@@ -361,12 +387,21 @@ impl TerminalPane {
     }
 
     /// Handle mouse down events - forwards to Zed terminal
+    /// Focuses terminal on click to ensure modifier keys work correctly
     fn handle_mouse_down(
         &mut self,
         event: &MouseDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Focus the terminal pane on click to ensure modifier keys are captured
+        self.focus_handle.focus(window, cx);
+
+        // Guard: skip terminal interaction if no content
+        if !self.has_terminal_content() {
+            return;
+        }
+
         if let Some(tab) = self.active_tab_mut() {
             tab.terminal.update(cx, |terminal, cx| {
                 terminal.mouse_down(event, cx);
@@ -382,6 +417,11 @@ impl TerminalPane {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Guard: skip if terminal has no content
+        if !self.has_terminal_content() {
+            return;
+        }
+
         if let Some(tab) = self.active_tab_mut() {
             tab.terminal.update(cx, |terminal, cx| {
                 terminal.mouse_up(event, cx);
@@ -453,10 +493,10 @@ impl TerminalPane {
             )
     }
 
-    /// Render the terminal content area
+    /// Render the terminal content area (returns Stateful<Div> for chaining mouse handlers)
     #[allow(clippy::needless_pass_by_ref_mut)] // GPUI read requires context
     #[allow(clippy::option_if_let_else)] // if-let is more readable here
-    fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_terminal_content_inner(&self, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
         let theme = cx.theme();
         let hovered_url = self.hovered_url.clone();
 
@@ -472,6 +512,7 @@ impl TerminalPane {
         if let Some(tab) = tabs.get(active_tab_index) {
             if let Some(lines) = tab.rendered_lines() {
                 div()
+                    .id("terminal-content")
                     .flex_1()
                     .w_full()
                     .relative()
@@ -507,6 +548,7 @@ impl TerminalPane {
                     })
             } else {
                 div()
+                    .id("terminal-content")
                     .flex_1()
                     .w_full()
                     .flex()
@@ -518,6 +560,7 @@ impl TerminalPane {
             }
         } else {
             div()
+                .id("terminal-content")
                 .flex_1()
                 .w_full()
                 .flex()
@@ -541,17 +584,22 @@ impl Focusable for TerminalPane {
 impl Render for TerminalPane {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let hovering_url = self.hovered_url.is_some();
+
+        // Build terminal content with mouse handlers scoped to content area only
+        let terminal_content = self
+            .render_terminal_content_inner(cx)
+            .when(hovering_url, gpui::Styled::cursor_pointer)
+            .on_mouse_move(cx.listener(Self::handle_mouse_move))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up));
+
         div()
             .track_focus(&self.focus_handle)
             .flex()
             .flex_col()
             .size_full()
-            .when(hovering_url, gpui::Styled::cursor_pointer)
             .on_key_down(cx.listener(Self::handle_key_down))
-            .on_mouse_move(cx.listener(Self::handle_mouse_move))
-            .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
-            .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
-            .child(self.render_terminal_content(cx))
+            .child(terminal_content)
             .child(self.render_tabs(cx))
     }
 }
