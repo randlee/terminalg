@@ -13,11 +13,12 @@ use settings::Settings;
 use std::path::PathBuf;
 use terminal::{
     terminal_settings::TerminalSettings, Event as TerminalEvent, MaybeNavigationTarget, Terminal,
-    TerminalBuilder, TerminalContent,
+    TerminalBuilder,
 };
 use theme::ActiveTheme;
 use util::shell::Shell;
 
+use crate::terminal::element::TerminalElement;
 use crate::terminal::tab::TerminalTab;
 
 /// Default regex patterns for detecting file paths in terminal output.
@@ -142,11 +143,7 @@ impl TerminalPane {
                                 pane.handle_terminal_event(&terminal, event, cx);
                             });
 
-                        let content = terminal.read(cx).last_content();
-                        let rendered_lines = build_lines_from_content(content);
-                        let mut tab =
-                            TerminalTab::new(terminal.clone(), working_dir, subscription, cx);
-                        tab.set_rendered_lines(rendered_lines);
+                        let tab = TerminalTab::new(terminal.clone(), working_dir, subscription, cx);
 
                         let tabs = pane
                             .tabs_by_workspace
@@ -177,7 +174,6 @@ impl TerminalPane {
     ) {
         match event {
             TerminalEvent::TitleChanged | TerminalEvent::BreadcrumbsChanged => {
-                self.update_terminal_snapshot(terminal, cx);
                 cx.emit(TerminalPaneEvent::TitleChanged);
                 cx.notify();
             }
@@ -185,7 +181,6 @@ impl TerminalPane {
                 self.close_terminal_by_id(terminal.entity_id(), cx);
             }
             TerminalEvent::Wakeup => {
-                self.update_terminal_snapshot(terminal, cx);
                 cx.notify();
             }
             TerminalEvent::Bell => {
@@ -238,6 +233,7 @@ impl TerminalPane {
 
     /// Handle navigation target hover state changes
     #[allow(clippy::needless_pass_by_ref_mut)] // Called from event handler context
+    #[allow(clippy::unused_self)] // Method signature required by event handler pattern
     #[allow(clippy::ref_option)] // API signature from Zed terminal crate
     fn handle_navigation_target(
         &mut self,
@@ -336,8 +332,23 @@ impl TerminalPane {
         let option_as_meta = TerminalSettings::get_global(cx).option_as_meta;
         if let Some(tab) = self.active_tab_mut() {
             tab.terminal.update(cx, |terminal, cx| {
+                // First try special key handling (ctrl+c, arrows, function keys, etc.)
                 let handled = terminal.try_keystroke(&event.keystroke, option_as_meta);
                 if handled {
+                    cx.stop_propagation();
+                } else if let Some(key_char) = &event.keystroke.key_char {
+                    let has_alt = event.keystroke.modifiers.alt;
+                    let has_meta = option_as_meta && event.keystroke.modifiers.platform;
+
+                    if has_alt || has_meta {
+                        // Alt/Meta + key should send ESC followed by the key
+                        let mut bytes = vec![0x1b]; // ESC
+                        bytes.extend_from_slice(key_char.as_bytes());
+                        terminal.input(bytes);
+                    } else {
+                        // Plain text input
+                        terminal.input(key_char.as_bytes().to_vec());
+                    }
                     cx.stop_propagation();
                 }
             });
@@ -345,32 +356,13 @@ impl TerminalPane {
         }
     }
 
-    /// Check if the active terminal has content (guards against empty terminal panics)
-    fn has_terminal_content(&self) -> bool {
-        self.tabs_by_workspace
-            .get(&self.active_workspace_id)
-            .and_then(|tabs| {
-                let index = self
-                    .active_tab_by_workspace
-                    .get(&self.active_workspace_id)?;
-                tabs.get(*index)
-            })
-            .is_some_and(|tab| tab.rendered_lines().is_some())
-    }
-
     /// Handle mouse move events - forwards to Zed terminal for hyperlink detection
-    /// Only processes events when terminal has content to avoid index panics
     fn handle_mouse_move(
         &mut self,
         event: &MouseMoveEvent,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // Guard: skip if terminal has no content
-        if !self.has_terminal_content() {
-            return;
-        }
-
         // Clear hover state if no modifier key is held (Cmd on macOS, Ctrl on other platforms)
         // Uses secondary() which is the cross-platform modifier for hyperlink activation
         if !event.modifiers.secondary() && self.hovered_url.is_some() {
@@ -379,34 +371,36 @@ impl TerminalPane {
         }
 
         if let Some(tab) = self.active_tab_mut() {
-            tab.terminal.update(cx, |terminal, cx| {
-                terminal.mouse_move(event, cx);
-            });
-            cx.notify();
+            // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
+            let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
+            if has_content {
+                tab.terminal.update(cx, |terminal, cx| {
+                    terminal.mouse_move(event, cx);
+                });
+                cx.notify();
+            }
         }
     }
 
-    /// Handle mouse down events - forwards to Zed terminal
-    /// Focuses terminal on click to ensure modifier keys work correctly
+    /// Handle mouse down events - forwards to Zed terminal and captures focus
     fn handle_mouse_down(
         &mut self,
         event: &MouseDownEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // Focus the terminal pane on click to ensure modifier keys are captured
+        // Focus the terminal pane on click
         self.focus_handle.focus(window, cx);
 
-        // Guard: skip terminal interaction if no content
-        if !self.has_terminal_content() {
-            return;
-        }
-
         if let Some(tab) = self.active_tab_mut() {
-            tab.terminal.update(cx, |terminal, cx| {
-                terminal.mouse_down(event, cx);
-            });
-            cx.notify();
+            // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
+            let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
+            if has_content {
+                tab.terminal.update(cx, |terminal, cx| {
+                    terminal.mouse_down(event, cx);
+                });
+                cx.notify();
+            }
         }
     }
 
@@ -417,16 +411,15 @@ impl TerminalPane {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // Guard: skip if terminal has no content
-        if !self.has_terminal_content() {
-            return;
-        }
-
         if let Some(tab) = self.active_tab_mut() {
-            tab.terminal.update(cx, |terminal, cx| {
-                terminal.mouse_up(event, cx);
-            });
-            cx.notify();
+            // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
+            let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
+            if has_content {
+                tab.terminal.update(cx, |terminal, cx| {
+                    terminal.mouse_up(event, cx);
+                });
+                cx.notify();
+            }
         }
     }
 
@@ -493,10 +486,11 @@ impl TerminalPane {
             )
     }
 
-    /// Render the terminal content area (returns Stateful<Div> for chaining mouse handlers)
+    /// Render the terminal content area
     #[allow(clippy::needless_pass_by_ref_mut)] // GPUI read requires context
     #[allow(clippy::option_if_let_else)] // if-let is more readable here
-    fn render_terminal_content_inner(&self, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
+    /// Render the terminal content area using the custom `TerminalElement`
+    fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let hovered_url = self.hovered_url.clone();
 
@@ -510,57 +504,35 @@ impl TerminalPane {
             .unwrap_or(&0);
 
         if let Some(tab) = tabs.get(active_tab_index) {
-            if let Some(lines) = tab.rendered_lines() {
-                div()
-                    .id("terminal-content")
-                    .flex_1()
-                    .w_full()
-                    .relative()
-                    .bg(theme.colors().terminal_background)
-                    .text_color(theme.colors().terminal_foreground)
-                    .font_family("Menlo")
-                    .text_sm()
-                    .p_2()
-                    .overflow_hidden()
-                    .children(lines.iter().cloned().map(|line| {
-                        div().child(if line.is_empty() {
-                            " ".to_string()
-                        } else {
-                            line
-                        })
-                    }))
-                    .when_some(hovered_url, |d, url| {
-                        d.child(
-                            div()
-                                .absolute()
-                                .bottom_0()
-                                .left_0()
-                                .right_0()
-                                .px_2()
-                                .py_1()
-                                .bg(theme.colors().element_background)
-                                .border_t_1()
-                                .border_color(theme.colors().border)
-                                .text_xs()
-                                .text_color(theme.colors().link_text_hover)
-                                .child(url),
-                        )
-                    })
-            } else {
-                div()
-                    .id("terminal-content")
-                    .flex_1()
-                    .w_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .bg(theme.colors().terminal_background)
-                    .text_color(theme.colors().text_muted)
-                    .child("Starting terminal...")
-            }
+            // Use the custom TerminalElement for proper sizing
+            div()
+                .flex_1()
+                .w_full()
+                .relative()
+                .overflow_hidden()
+                .child(TerminalElement::new(
+                    tab.terminal.clone(),
+                    ("terminal-content", active_tab_index),
+                ))
+                .when_some(hovered_url, |d, url| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .bottom_0()
+                            .left_0()
+                            .right_0()
+                            .px_2()
+                            .py_1()
+                            .bg(theme.colors().element_background)
+                            .border_t_1()
+                            .border_color(theme.colors().border)
+                            .text_xs()
+                            .text_color(theme.colors().link_text_hover)
+                            .child(url),
+                    )
+                })
         } else {
             div()
-                .id("terminal-content")
                 .flex_1()
                 .w_full()
                 .flex()
@@ -584,43 +556,22 @@ impl Focusable for TerminalPane {
 impl Render for TerminalPane {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let hovering_url = self.hovered_url.is_some();
-
-        // Build terminal content with mouse handlers scoped to content area only
-        let terminal_content = self
-            .render_terminal_content_inner(cx)
-            .when(hovering_url, gpui::Styled::cursor_pointer)
-            .on_mouse_move(cx.listener(Self::handle_mouse_move))
-            .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
-            .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up));
-
         div()
             .track_focus(&self.focus_handle)
             .flex()
             .flex_col()
             .size_full()
+            .when(hovering_url, gpui::Styled::cursor_pointer)
             .on_key_down(cx.listener(Self::handle_key_down))
-            .child(terminal_content)
+            .on_mouse_move(cx.listener(Self::handle_mouse_move))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
+            .child(self.render_terminal_content(cx))
             .child(self.render_tabs(cx))
     }
 }
 
 impl TerminalPane {
-    fn update_terminal_snapshot(&mut self, terminal: &Entity<Terminal>, cx: &Context<Self>) {
-        let content = terminal.read(cx).last_content();
-        let lines = build_lines_from_content(content);
-        let terminal_id = terminal.entity_id();
-
-        for tabs in self.tabs_by_workspace.values_mut() {
-            if let Some(tab) = tabs
-                .iter_mut()
-                .find(|tab| tab.matches_terminal(terminal_id))
-            {
-                tab.set_rendered_lines(lines);
-                break;
-            }
-        }
-    }
-
     fn close_terminal_by_id(&mut self, terminal_id: gpui::EntityId, cx: &mut Context<Self>) {
         let mut target: Option<(String, usize)> = None;
         for (workspace_id, tabs) in &self.tabs_by_workspace {
@@ -652,32 +603,6 @@ impl TerminalPane {
     }
 }
 
-fn build_lines_from_content(content: &TerminalContent) -> Vec<String> {
-    let mut lines: Vec<String> = Vec::new();
-    let mut current_line = String::new();
-    let mut current_row = 0i32;
-
-    for cell in &content.cells {
-        if cell.point.line.0 != current_row {
-            if !current_line.is_empty() || current_row < cell.point.line.0 {
-                lines.push(std::mem::take(&mut current_line));
-            }
-            // Fill empty lines
-            #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-            while (lines.len() as i32) < cell.point.line.0 {
-                lines.push(String::new());
-            }
-            current_row = cell.point.line.0;
-        }
-        current_line.push(cell.c);
-    }
-    if !current_line.is_empty() {
-        lines.push(current_line);
-    }
-
-    lines
-}
-
 fn clamp_active_index(active_index: usize, len: usize) -> Option<usize> {
     if len == 0 {
         None
@@ -705,13 +630,8 @@ fn strip_line_col_suffix(path: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        build_lines_from_content, clamp_active_index, strip_line_col_suffix, DEFAULT_PATH_REGEXES,
-    };
+    use super::{clamp_active_index, strip_line_col_suffix, DEFAULT_PATH_REGEXES};
     use regex::Regex;
-    use terminal::alacritty_terminal::index::{Column, Line, Point as AlacPoint};
-    use terminal::alacritty_terminal::term::cell::Cell;
-    use terminal::{IndexedCell, TerminalContent};
 
     #[test]
     fn clamp_active_index_handles_empty() {
@@ -760,33 +680,6 @@ mod tests {
     #[test]
     fn strip_line_col_suffix_non_numeric_tail() {
         assert_eq!(strip_line_col_suffix("/tmp/foo:bar"), "/tmp/foo:bar");
-    }
-
-    #[test]
-    fn build_lines_from_content_inserts_empty_lines() {
-        let content = TerminalContent {
-            cells: vec![
-                IndexedCell {
-                    point: AlacPoint::new(Line(0), Column(0)),
-                    cell: Cell {
-                        c: 'a',
-                        ..Default::default()
-                    },
-                },
-                IndexedCell {
-                    point: AlacPoint::new(Line(2), Column(0)),
-                    cell: Cell {
-                        c: 'b',
-                        ..Default::default()
-                    },
-                },
-            ],
-            ..Default::default()
-        };
-
-        let lines = build_lines_from_content(&content);
-
-        assert_eq!(lines, vec!["a".to_string(), String::new(), "b".to_string()]);
     }
 
     // URL/Path regex pattern tests
