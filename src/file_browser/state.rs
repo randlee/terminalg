@@ -49,11 +49,7 @@ fn walk_dir(root: &Path, rel_path: &Path, depth: usize, entries: &mut Vec<Entry>
     let read_dir = match std::fs::read_dir(&abs_path) {
         Ok(read_dir) => read_dir,
         Err(error) => {
-            tracing::warn!(
-                "Failed to read directory {}: {}",
-                abs_path.display(),
-                error
-            );
+            tracing::warn!("Failed to read directory {}: {}", abs_path.display(), error);
             return;
         }
     };
@@ -77,12 +73,10 @@ fn walk_dir(root: &Path, rel_path: &Path, depth: usize, entries: &mut Vec<Entry>
         }
     }
 
-    children.sort_by(|a, b| {
-        match (a.1, b.1) {
-            (true, false) => Ordering::Less,
-            (false, true) => Ordering::Greater,
-            _ => a.0.to_string_lossy().cmp(&b.0.to_string_lossy()),
-        }
+    children.sort_by(|a, b| match (a.1, b.1) {
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        _ => a.0.to_string_lossy().cmp(&b.0.to_string_lossy()),
     });
 
     for (child_name, is_dir) in children {
