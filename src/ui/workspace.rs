@@ -182,7 +182,8 @@ impl WorkspaceView {
         }
 
         // Create terminal pane with workspace root as working directory
-        let working_directory = Some(config_store.workspace_root().to_path_buf());
+        let workspace_root = config_store.workspace_root().to_path_buf();
+        let working_directory = Some(workspace_root.clone());
         let workspace_id = config_store.active_workspace().id.clone();
         let terminal_pane =
             cx.new(|cx| TerminalPane::new(workspace_id.clone(), working_directory, cx));
@@ -202,7 +203,8 @@ impl WorkspaceView {
         });
 
         // Create file browser pane
-        let file_browser_pane = cx.new(|cx| FileBrowserPane::new(workspace_id, cx));
+        let file_browser_pane =
+            cx.new(|cx| FileBrowserPane::new(workspace_id.clone(), workspace_root.clone(), cx));
 
         // Subscribe to file browser pane events
         let file_browser_subscription =
@@ -249,7 +251,11 @@ impl WorkspaceView {
 
         // Update file browser pane
         self.file_browser_pane.update(cx, |file_browser_pane, cx| {
-            file_browser_pane.set_active_workspace(workspace_id.clone(), cx);
+            file_browser_pane.set_active_workspace(
+                workspace_id.clone(),
+                workspace_root.to_path_buf(),
+                cx,
+            );
         });
 
         // Update terminal pane

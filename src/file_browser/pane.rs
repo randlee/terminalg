@@ -14,7 +14,9 @@ use std::path::PathBuf;
 use theme::ActiveTheme;
 
 use crate::file_browser::render::{render_entry, EntryDetails};
-use crate::file_browser::state::{collapse_dir, expand_dir, is_expanded, Entry, ProjectEntryId};
+use crate::file_browser::state::{
+    build_entries_from_fs, collapse_dir, expand_dir, is_expanded, Entry, ProjectEntryId,
+};
 
 /// Events emitted by the file browser pane
 #[derive(Clone, Debug)]
@@ -65,6 +67,9 @@ pub struct FileBrowserPane {
     /// Scroll handle for virtualized list
     scroll_handle: UniformListScrollHandle,
 
+    /// Workspace root path for filesystem traversal
+    workspace_root: PathBuf,
+
     /// Active workspace ID
     active_workspace_id: String,
 
@@ -76,69 +81,31 @@ impl FileBrowserPane {
     /// Create a new file browser pane
     #[must_use]
     #[allow(clippy::needless_pass_by_ref_mut)] // cx will be used for subscriptions
-    pub fn new(workspace_id: String, cx: &mut Context<Self>) -> Self {
+    pub fn new(workspace_id: String, workspace_root: PathBuf, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let scroll_handle = UniformListScrollHandle::new();
         let mut state_by_workspace = HashMap::default();
 
-        // Initialize state with placeholder entries for demonstration
-        let placeholder_entries = Self::create_placeholder_tree();
+        // Initialize state from workspace filesystem
+        let all_entries = build_entries_from_fs(&workspace_root);
         let initial_state = FileBrowserRuntimeState {
-            all_entries: placeholder_entries.clone(),
-            visible_entries: placeholder_entries,
+            all_entries,
+            visible_entries: Vec::new(),
             ..Default::default()
         };
 
         state_by_workspace.insert(workspace_id.clone(), initial_state);
 
-        Self {
+        let mut pane = Self {
             focus_handle,
             scroll_handle,
+            workspace_root,
             active_workspace_id: workspace_id,
             state_by_workspace,
-        }
-    }
+        };
 
-    /// Create placeholder tree for demonstration
-    fn create_placeholder_tree() -> Vec<Entry> {
-        vec![
-            Entry {
-                id: 1,
-                path: PathBuf::from("src"),
-                is_dir: true,
-                depth: 0,
-            },
-            Entry {
-                id: 2,
-                path: PathBuf::from("src/main.rs"),
-                is_dir: false,
-                depth: 1,
-            },
-            Entry {
-                id: 3,
-                path: PathBuf::from("src/lib.rs"),
-                is_dir: false,
-                depth: 1,
-            },
-            Entry {
-                id: 4,
-                path: PathBuf::from("src/file_browser"),
-                is_dir: true,
-                depth: 1,
-            },
-            Entry {
-                id: 5,
-                path: PathBuf::from("Cargo.toml"),
-                is_dir: false,
-                depth: 0,
-            },
-            Entry {
-                id: 6,
-                path: PathBuf::from("README.md"),
-                is_dir: false,
-                depth: 0,
-            },
-        ]
+        pane.rebuild_visible_entries();
+        pane
     }
 
     /// Get the active runtime state
@@ -146,20 +113,34 @@ impl FileBrowserPane {
         self.state_by_workspace
             .entry(self.active_workspace_id.clone())
             .or_insert_with(|| {
-                let placeholder_entries = Self::create_placeholder_tree();
+                let all_entries = build_entries_from_fs(&self.workspace_root);
                 FileBrowserRuntimeState {
-                    all_entries: placeholder_entries.clone(),
-                    visible_entries: placeholder_entries,
+                    all_entries,
+                    visible_entries: Vec::new(),
                     ..Default::default()
                 }
             })
     }
 
     /// Switch to a different workspace
-    pub fn set_active_workspace(&mut self, workspace_id: String, cx: &mut Context<Self>) {
+    pub fn set_active_workspace(
+        &mut self,
+        workspace_id: String,
+        workspace_root: PathBuf,
+        cx: &mut Context<Self>,
+    ) {
         self.active_workspace_id = workspace_id;
+        self.workspace_root = workspace_root;
         self.get_active_state();
+        self.refresh_all_entries();
         cx.notify();
+    }
+
+    fn refresh_all_entries(&mut self) {
+        let all_entries = build_entries_from_fs(&self.workspace_root);
+        let state = self.get_active_state();
+        state.all_entries = all_entries;
+        self.rebuild_visible_entries();
     }
 
     /// Rebuild visible entries based on current expansion state
@@ -577,14 +558,6 @@ impl Render for FileBrowserPane {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn placeholder_tree_has_entries() {
-        let entries = FileBrowserPane::create_placeholder_tree();
-        assert!(!entries.is_empty());
-        assert!(entries.iter().any(|e| e.is_dir));
-        assert!(entries.iter().any(|e| !e.is_dir));
-    }
 
     #[test]
     fn runtime_state_default() {

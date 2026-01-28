@@ -4,8 +4,8 @@
 **Created:** 2026-01-27
 **Status:** Design Complete
 **Estimated Duration:** 8-10 hours
-**Target Branch:** `feature/sprint-3-1-file-browser`
-**Worktree Path:** `/Users/randlee/Documents/github/terminalg-worktrees/sprint-3-1-file-browser`
+**Target Branch:** `feature/sprint-3-1-wave3`
+**Worktree Path:** `/Users/randlee/Documents/github/terminalg-worktrees/feature/sprint-3-1-wave3`
 
 ---
 
@@ -1280,9 +1280,9 @@ actions!(
 
 ---
 
-## 10. Build Sequence (Phased Implementation)
+## 10. Build Sequence (Wave-Based Implementation)
 
-### Phase 1: Foundation (2-3 hours)
+### Wave 1: Foundation (2-3 hours)
 
 **Goal:** Basic tree rendering, no interactions
 
@@ -1300,7 +1300,7 @@ actions!(
 
 **Checkpoint:** App runs, left pane shows "File Browser" placeholder
 
-### Phase 2: Tree Rendering (2-3 hours)
+### Wave 2: Tree Rendering (2-3 hours)
 
 **Goal:** Display static tree with icons, no interactions
 
@@ -1320,7 +1320,7 @@ actions!(
 
 **Checkpoint:** Tree renders with files/folders, icons, git status indicators
 
-### Phase 3: Expand/Collapse (1-2 hours)
+### Wave 3: Expand/Collapse (1-2 hours)
 
 **Goal:** Interactive tree with expand/collapse
 
@@ -1338,7 +1338,7 @@ actions!(
 
 **Checkpoint:** Tree expand/collapse functional via mouse and keyboard
 
-### Phase 4: Selection (1 hour)
+### Wave 4: Selection (1 hour)
 
 **Goal:** Single and multi-selection with visual feedback
 
@@ -1355,7 +1355,7 @@ actions!(
 
 **Checkpoint:** Selection works via mouse and keyboard
 
-### Phase 5: Context Menu (1 hour)
+### Wave 5: Context Menu (1 hour)
 
 **Goal:** Right-click context menu with stub actions
 
@@ -1371,7 +1371,7 @@ actions!(
 
 **Checkpoint:** Context menu displays and dismisses correctly
 
-### Phase 6: File Operations (2-3 hours)
+### Wave 6: File Operations (2-3 hours)
 
 **Goal:** New file, new folder, delete with confirmation
 
@@ -1397,7 +1397,7 @@ actions!(
 
 **Checkpoint:** New file, new folder, delete working
 
-### Phase 7: Copy/Paste, Rename (1-2 hours)
+### Wave 7: Copy/Paste, Rename (1-2 hours)
 
 **Goal:** Copy/cut/paste and rename operations
 
@@ -1414,7 +1414,7 @@ actions!(
 
 **Checkpoint:** Copy/paste, rename working
 
-### Phase 8: Additional Actions (1 hour)
+### Wave 8: Additional Actions (1 hour)
 
 **Goal:** Copy path, reveal in finder, collapse all
 
@@ -1428,7 +1428,7 @@ actions!(
 
 **Checkpoint:** All context menu actions working
 
-### Phase 9: "Open in Terminal" Integration (30 min)
+### Wave 9: "Open in Terminal" Integration (30 min)
 
 **Goal:** Open folder in terminal
 
@@ -1441,7 +1441,7 @@ actions!(
 
 **Checkpoint:** "Open in Terminal" functional
 
-### Phase 10: State Persistence (1 hour)
+### Wave 10: State Persistence (1 hour)
 
 **Goal:** Save/restore expanded dirs, scroll position, selection
 
@@ -1457,7 +1457,7 @@ actions!(
 
 **Checkpoint:** File browser state persists across workspace switches
 
-### Phase 11: Auto-Fold & Polish (1 hour)
+### Wave 11: Auto-Fold & Polish (1 hour)
 
 **Goal:** Auto-fold single-child directories, final polish
 
@@ -1924,5 +1924,5 @@ fn validate_filename(filename: &str) -> Result<()> {
 ---
 
 **Document Status:** Complete
-**Next Steps:** Review design -> Create worktree -> Begin Phase 1 implementation
+**Next Steps:** Review design -> Create worktree -> Begin Wave 1 implementation
 **Estimated Total Effort:** 8-10 hours

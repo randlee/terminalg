@@ -3,10 +3,10 @@
 //! This module provides utilities for managing the flattened tree structure
 //! and efficient binary search operations on expanded directory IDs.
 
+use std::cmp::Ordering;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-
-// TODO: Import actual types once project crate is integrated
-// use project::{Project, ProjectEntryId, GitEntry, Worktree};
 
 /// Placeholder for `ProjectEntryId` until project crate is integrated
 /// In actual implementation, this will be `project::ProjectEntryId`
@@ -22,49 +22,93 @@ pub struct Entry {
     pub depth: usize,
 }
 
-/// Placeholder worktree reference
-/// In actual implementation, this will be `&project::Worktree`
-pub struct WorktreeRef;
-
-/// Build a flattened tree from a worktree, respecting expanded directories
+/// Build a flattened tree from the local filesystem
 ///
-/// This function traverses the worktree depth-first and builds a flat Vec of entries
-/// that are visible based on the expansion state. Only entries whose parent directories
-/// are expanded will be included.
+/// This function traverses the directory tree depth-first and returns all entries
+/// (both files and directories) with stable IDs derived from their relative paths.
 ///
 /// # Arguments
-/// * `worktree` - Reference to the worktree to traverse
-/// * `expanded_dir_ids` - Sorted slice of directory IDs that are expanded
+/// * `root` - Absolute path of the workspace root
 ///
 /// # Returns
-/// Vec of visible entries in depth-first order
-///
-/// # TODO
-/// - Implement actual worktree traversal using project crate
-/// - Add auto-fold logic for single-child directories
-/// - Calculate proper depth for each entry
-/// - Include git status information from `GitEntry`
-/// - Handle symlinks and special files
-/// - Add error handling for filesystem access
-#[allow(clippy::ptr_arg)] // Will use actual Worktree type later
+/// Vec of entries in depth-first order
 #[allow(clippy::missing_const_for_fn)] // Returns Vec, which is not const-compatible
-pub fn build_flattened_tree(
-    _worktree: &WorktreeRef,
-    _expanded_dir_ids: &[ProjectEntryId],
-) -> Vec<Entry> {
-    // TODO: Implement actual tree building logic
-    // Pseudocode:
-    //
-    // 1. Get root entries from worktree
-    // 2. For each entry in depth-first order:
-    //    a. Include entry if parent is expanded (or entry is root-level)
-    //    b. If entry is directory and expanded:
-    //       - Recursively process children
-    //    c. Apply auto-fold logic for single-child directories
-    //    d. Calculate depth based on path components
-    // 3. Return flattened Vec<Entry>
+pub fn build_entries_from_fs(root: &Path) -> Vec<Entry> {
+    let mut entries = Vec::new();
+    walk_dir(root, Path::new(""), 0, &mut entries);
+    entries
+}
 
-    Vec::new()
+fn walk_dir(root: &Path, rel_path: &Path, depth: usize, entries: &mut Vec<Entry>) {
+    let abs_path = if rel_path.as_os_str().is_empty() {
+        root.to_path_buf()
+    } else {
+        root.join(rel_path)
+    };
+
+    let read_dir = match std::fs::read_dir(&abs_path) {
+        Ok(read_dir) => read_dir,
+        Err(error) => {
+            tracing::warn!(
+                "Failed to read directory {}: {}",
+                abs_path.display(),
+                error
+            );
+            return;
+        }
+    };
+
+    let mut children: Vec<(PathBuf, bool)> = Vec::new();
+    for entry in read_dir {
+        match entry {
+            Ok(entry) => {
+                let file_type = entry.file_type().ok();
+                let is_dir = file_type.is_some_and(|file_type| file_type.is_dir());
+                let name = PathBuf::from(entry.file_name());
+                children.push((name, is_dir));
+            }
+            Err(error) => {
+                tracing::warn!(
+                    "Failed to read directory entry under {}: {}",
+                    abs_path.display(),
+                    error
+                );
+            }
+        }
+    }
+
+    children.sort_by(|a, b| {
+        match (a.1, b.1) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            _ => a.0.to_string_lossy().cmp(&b.0.to_string_lossy()),
+        }
+    });
+
+    for (child_name, is_dir) in children {
+        let child_rel_path = if rel_path.as_os_str().is_empty() {
+            child_name
+        } else {
+            rel_path.join(child_name)
+        };
+
+        entries.push(Entry {
+            id: entry_id_for_path(&child_rel_path),
+            path: child_rel_path.clone(),
+            is_dir,
+            depth,
+        });
+
+        if is_dir {
+            walk_dir(root, &child_rel_path, depth + 1, entries);
+        }
+    }
+}
+
+fn entry_id_for_path(path: &Path) -> ProjectEntryId {
+    let mut hasher = DefaultHasher::new();
+    path.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Check if an entry ID is in the sorted `expanded_dir_ids` vector
@@ -274,12 +318,26 @@ mod tests {
     }
 
     #[test]
-    fn build_flattened_tree_placeholder() {
-        let worktree = WorktreeRef;
-        let expanded: Vec<u64> = vec![1, 2, 3];
+    fn build_entries_from_fs_orders_depth_first() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path();
 
-        let result = build_flattened_tree(&worktree, &expanded);
-        assert!(result.is_empty());
+        std::fs::create_dir(root.join("src")).expect("create src dir");
+        std::fs::write(root.join("src/main.rs"), "fn main() {}").expect("write main");
+        std::fs::write(root.join("b.txt"), "b").expect("write b");
+
+        let entries = build_entries_from_fs(root);
+        let paths: Vec<String> = entries
+            .iter()
+            .map(|entry| entry.path.to_string_lossy().to_string())
+            .collect();
+
+        assert_eq!(paths, vec!["src", "src/main.rs", "b.txt"]);
+        assert_eq!(entries[0].depth, 0);
+        assert_eq!(entries[1].depth, 1);
+        assert_eq!(entries[2].depth, 0);
+        assert!(entries[0].is_dir);
+        assert!(!entries[2].is_dir);
     }
 
     #[test]
