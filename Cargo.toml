@@ -34,6 +34,14 @@ theme = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
 # Zed Terminal (GPL-3.0) - Core terminal emulation
 terminal = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
 
+# Zed Project (GPL-3.0) - File browser integration
+project = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+worktree = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+fs = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+git = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+file_icons = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+editor = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+
 # Zed UI Components (GPL-3.0)
 ui = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
 
