@@ -63,6 +63,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            libx11-dev \
+            libx11-xcb-dev \
             libxcb1-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
@@ -70,6 +72,7 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libwayland-dev \
+            libasound2-dev \
             libvulkan-dev
 
       - name: Check code compiles
@@ -138,6 +141,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            libx11-dev \
+            libx11-xcb-dev \
             libxcb1-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
@@ -145,6 +150,7 @@ jobs:
             libxkbcommon-dev \
             libxkbcommon-x11-dev \
             libwayland-dev \
+            libasound2-dev \
             libvulkan-dev
 
       - name: Run Clippy

@@ -230,8 +230,12 @@ mod tests {
 
     #[test]
     fn test_settings_store_save_and_reload() {
-        // Create a new store (uses real config directory)
-        let mut store = SettingsStore::new().expect("Failed to create settings store");
+        let temp_dir = setup_test_config_dir();
+        let settings_path = temp_dir.path().join("settings.json");
+
+        // Create a new store in an isolated temp directory
+        let mut store =
+            SettingsStore::new_with_path(settings_path).expect("Failed to create settings store");
 
         // Modify settings
         let original_font_size = store.settings().terminal.font_size;

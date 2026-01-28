@@ -11,6 +11,7 @@ mod settings_adapter;
 mod theme_adapter;
 
 // Active modules
+mod file_browser;
 mod terminal;
 mod ui;
 mod viewer;

@@ -4,7 +4,8 @@
 **Created:** 2026-01-27
 **Status:** Design Complete
 **Estimated Duration:** 8-10 hours
-**Target Branch:** `feature/sprint-3-1-file-browser`
+**Target Branch:** `feature/sprint-3-1-wave3`
+**Worktree Path:** `/Users/randlee/Documents/github/terminalg-worktrees/feature/sprint-3-1-wave3`
 
 ---
 
@@ -21,6 +22,8 @@ Sprint 3.1 migrates Zed's `project_panel` to TerminalG as a file browser pane, p
 
 ### Strategic Decisions
 - **Use Zed's `project` crate as git dependency** (like terminal)
+- **Project/worktree owned by WorkspaceView** and lazily initialized on first selection
+- **Pause file watching when hidden** and full refresh on re-show (debounced ~500ms)
 - **Adapt project_panel patterns**, not copy wholesale
 - **Include most features** - Don't over-simplify
 - **Defer search/diff** - Requires additional infrastructure
@@ -140,7 +143,7 @@ impl WorkspaceConfigStore {
 ```
 
 **Insights for FileBrowser:**
-- Add `file_browser_state: Option<FileBrowserState>` to WorkspaceConfig
+- Add `file_browser_state: Option<FileBrowserPersistedState>` to WorkspaceConfig (best-effort restore)
 - Serialize expanded directories, scroll position, selected path
 - Auto-save on expand/collapse/selection changes
 
@@ -377,12 +380,12 @@ fn confirm(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) 
 
 ### Decision 4: State Persistence
 
-**Decision:** Extend WorkspaceConfig with FileBrowserState
+**Decision:** Extend WorkspaceConfig with FileBrowserPersistedState (paths only)
 
 **Structure:**
 ```rust
 #[derive(Serialize, Deserialize)]
-pub struct FileBrowserState {
+pub struct FileBrowserPersistedState {
     pub expanded_dirs: Vec<PathBuf>,  // Relative to workspace root
     pub scroll_offset: f32,
     pub selected_path: Option<PathBuf>,
@@ -394,15 +397,16 @@ pub struct FileBrowserState {
 - Simple, JSON-serializable
 - Per-workspace state isolation
 - Auto-saved via existing debounce mechanism
+- **Best-effort restore**: if paths no longer exist (rename/move/delete), drop them silently
 
 ### Decision 5: "Open in Terminal" Integration
 
-**Decision:** Add `TerminalPaneEvent::OpenPath(PathBuf)` event
+**Decision:** Add `FileBrowserPaneEvent::OpenInTerminal(PathBuf)` event
 
 **Flow:**
 1. User right-clicks folder in file browser
 2. Selects "Open in Terminal" from context menu
-3. FileBrowserPane emits `OpenPath(folder_path)` event
+3. FileBrowserPane emits `OpenInTerminal(folder_path)` event
 4. WorkspaceView subscribes, handles event
 5. WorkspaceView calls `terminal_pane.open_in_directory(path, cx)`
 6. TerminalPane spawns new terminal with cwd = path
@@ -427,6 +431,14 @@ src/file_browser/
 └── context_menu.rs            # Context menu builder
 ```
 
+### 5.1.1 Project/Worktree Ownership (WorkspaceView)
+
+- `WorkspaceView` owns a per-workspace `Project` instance.
+- `Project`/`Worktree` are **lazily created** the first time a workspace is selected.
+- `FileBrowserPane` is created with the workspace’s `Project` entity and does not share it across workspaces.
+- File watching is **paused/disabled** while the file browser pane is hidden to avoid background churn.
+- When visibility is restored, `FileBrowserPane` performs a **full refresh** of visible entries, debounced to ~500ms.
+
 ### 5.2 FileBrowserPane
 
 **File:** `src/file_browser/pane.rs`
@@ -439,12 +451,12 @@ use project::{Project, ProjectEntryId, WorktreeId, GitEntry};
 use gpui::{Entity, FocusHandle, UniformListScrollHandle};
 
 pub struct FileBrowserPane {
-    // Project integration
+    // Project integration (provided by WorkspaceView on creation)
     project: Entity<Project>,
     fs: Arc<dyn Fs>,
 
-    // Per-workspace state
-    state_by_workspace: HashMap<String, FileBrowserState>,
+    // Per-workspace runtime state (not persisted)
+    state_by_workspace: HashMap<String, FileBrowserRuntimeState>,
     active_workspace_id: String,
 
     // UI state
@@ -464,7 +476,7 @@ pub struct FileBrowserPane {
     clipboard: Option<ClipboardEntry>,
 }
 
-struct FileBrowserState {
+struct FileBrowserRuntimeState {
     // Tree structure (flattened)
     visible_entries: Vec<GitEntry>,
 
@@ -480,6 +492,13 @@ struct FileBrowserState {
 
     // Scroll position
     scroll_offset: f32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct FileBrowserPersistedState {
+    expanded_dirs: Vec<PathBuf>,
+    scroll_offset: f32,
+    selected_path: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug)]
@@ -505,9 +524,15 @@ impl FileBrowserPane {
     pub fn new(project: Entity<Project>, workspace_id: String, cx: &mut Context<Self>) -> Self;
 
     // Workspace switching
-    pub fn set_active_workspace(&mut self, workspace_id: String, cx: &mut Context<Self>);
-    pub fn save_state(&self) -> FileBrowserState;
-    pub fn load_state(&mut self, state: FileBrowserState, cx: &mut Context<Self>);
+    pub fn set_active_workspace(
+        &mut self,
+        workspace_id: String,
+        project: Entity<Project>,
+        cx: &mut Context<Self>,
+    );
+    pub fn set_visible(&mut self, visible: bool, window: &mut Window, cx: &mut Context<Self>);
+    pub fn save_state(&self) -> FileBrowserPersistedState;
+    pub fn load_state(&mut self, state: FileBrowserPersistedState, cx: &mut Context<Self>);
 
     // Tree management
     fn update_visible_entries(&mut self, autoscroll: bool, window: &mut Window, cx: &mut Context<Self>);
@@ -580,6 +605,7 @@ pub fn build_flattened_tree(
     // Traverse worktree depth-first
     // Include entry if parent is expanded
     // Auto-fold single-child directories if enabled
+    // Filter hidden files only if global setting is enabled
 }
 
 /// Binary search in sorted expanded_dir_ids
@@ -606,6 +632,9 @@ pub fn calculate_depth(entry: &GitEntry, worktree: &Worktree) -> usize {
     entry.path.components().count() - 1
 }
 ```
+
+**Workspace switch behavior:**
+- `set_active_workspace` swaps the `Project` handle, loads persisted state if available, and triggers `update_visible_entries`.
 
 **Estimated Size:** ~200-300 lines
 
@@ -930,7 +959,7 @@ Emit FileBrowserPaneEvent::OpenInTerminal(folder_path)
 WorkspaceView subscription handler
     |
     v
-terminal_pane.spawn_terminal_with_directory(path, cx)
+terminal_pane.spawn_terminal(workspace_id, Some(path), cx)
     |
     v
 New terminal tab opens with cwd = folder_path
@@ -952,29 +981,51 @@ Switch to terminal pane (set terminal_visible = true)
 ```rust
 pub struct WorkspaceView {
     // Add file browser pane
-    file_browser_pane: Option<Entity<FileBrowserPane>>,
+    file_browser_pane: Entity<FileBrowserPane>,
+
+    // Per-workspace project instances (lazy)
+    project_by_workspace: HashMap<String, Entity<Project>>,
 
     // Existing fields...
-    terminal_pane: Option<Entity<TerminalPane>>,
+    terminal_pane: Entity<TerminalPane>,
 }
 
 impl WorkspaceView {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        // Create project entity
-        let project = cx.new(|cx| Project::local(...));
+        // Create project for active workspace (others are lazy)
+        let workspace_id = config_store.active_workspace().id.clone();
+        let root = config_store.workspace_root().to_path_buf();
+        let project = cx.new(|cx| Project::local(root, cx));
+        let mut project_by_workspace = HashMap::default();
+        project_by_workspace.insert(workspace_id.clone(), project.clone());
 
         // Create file browser pane
-        let file_browser_pane = cx.new(|cx| {
-            FileBrowserPane::new(project.clone(), "default".to_string(), cx)
-        });
+        let file_browser_pane =
+            cx.new(|cx| FileBrowserPane::new(project.clone(), workspace_id, cx));
 
         // Subscribe to file browser events
         cx.subscribe(&file_browser_pane, Self::handle_file_browser_event);
 
         Self {
-            file_browser_pane: Some(file_browser_pane),
+            file_browser_pane,
+            project_by_workspace,
             ...
         }
+    }
+
+    fn ensure_project_for_workspace(
+        &mut self,
+        workspace_id: &str,
+        cx: &mut Context<Self>,
+    ) -> Entity<Project> {
+        if let Some(project) = self.project_by_workspace.get(workspace_id) {
+            return project.clone();
+        }
+        let root = self.config_store.workspace_root().to_path_buf();
+        let project = cx.new(|cx| Project::local(root, cx));
+        self.project_by_workspace
+            .insert(workspace_id.to_string(), project.clone());
+        project
     }
 
     fn handle_file_browser_event(
@@ -989,17 +1040,15 @@ impl WorkspaceView {
                 // Future: open in document viewer
             }
             FileBrowserPaneEvent::OpenInTerminal(path) => {
-                if let Some(terminal_pane) = &self.terminal_pane {
-                    terminal_pane.update(cx, |pane, cx| {
-                        pane.spawn_terminal(
-                            self.active_workspace_id.clone(),
-                            Some(path.clone()),
-                            cx,
-                        );
-                    });
-                    self.terminal_visible = true;
-                    cx.notify();
-                }
+                self.terminal_pane.update(cx, |pane, cx| {
+                    pane.spawn_terminal(
+                        self.active_workspace_id.clone(),
+                        Some(path.clone()),
+                        cx,
+                    );
+                });
+                self.terminal_visible = true;
+                cx.notify();
             }
             FileBrowserPaneEvent::SelectionChanged(_path) => {
                 // Future: preview in document viewer
@@ -1008,12 +1057,7 @@ impl WorkspaceView {
     }
 
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Replace file browser placeholder with actual pane
-        let file_browser_content = if let Some(pane) = &self.file_browser_pane {
-            pane.clone().into_any_element()
-        } else {
-            div().child("File Browser").into_any_element()
-        };
+        let file_browser_content = self.file_browser_pane.clone().into_any_element();
 
         h_flex()
             .when(self.file_browser_visible, |flex| {
@@ -1027,6 +1071,12 @@ impl WorkspaceView {
     }
 }
 ```
+
+**Visibility handling:**
+- On `file_browser_visible = false`, call `file_browser_pane.set_visible(false, ...)` to pause watchers.
+- On `true`, call `set_visible(true, ...)` to resume watchers and trigger a debounced full refresh (~500ms).
+**Workspace switching:**
+- On workspace change, call `ensure_project_for_workspace()` and then `file_browser_pane.set_active_workspace(workspace_id, project, cx)`.
 
 **Estimated Changes:** ~100 lines added/modified
 
@@ -1043,11 +1093,11 @@ pub struct WorkspaceConfig {
 
     // Add file browser state
     #[serde(default)]
-    pub file_browser_state: Option<FileBrowserState>,
+    pub file_browser_state: Option<FileBrowserPersistedState>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct FileBrowserState {
+pub struct FileBrowserPersistedState {
     /// Expanded directory paths (relative to workspace root)
     pub expanded_dirs: Vec<PathBuf>,
 
@@ -1058,7 +1108,7 @@ pub struct FileBrowserState {
     pub selected_path: Option<PathBuf>,
 }
 
-impl Default for FileBrowserState {
+impl Default for FileBrowserPersistedState {
     fn default() -> Self {
         Self {
             expanded_dirs: vec![],
@@ -1069,7 +1119,17 @@ impl Default for FileBrowserState {
 }
 ```
 
+**Restore behavior:** Best-effort; if persisted paths are missing on load (rename/move/delete), drop them silently.
+
 **Estimated Changes:** ~30 lines added
+
+---
+
+### 7.3 Global Settings (Hidden Files)
+
+- Add a global setting `file_browser.hide_hidden_files: bool` (default `false`).
+- Settings source of truth should live in the existing settings system (Zed settings adapter).
+- `build_flattened_tree` checks this setting; when `true`, filter entries with filenames starting with `.`.
 
 ---
 
@@ -1095,8 +1155,8 @@ git = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
 # File icons (GPL-3.0)
 file_icons = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
 
-# Editor component (for inline editing) - already have via terminal
-# editor = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
+# Editor component (for inline editing)
+editor = { git = "https://github.com/zed-industries/zed", tag = "v0.220.3" }
 ```
 
 ### 8.2 Transitive Dependencies
@@ -1139,7 +1199,7 @@ These crates will be pulled in automatically:
 | `Cargo.toml` | Add project, fs, worktree, git, file_icons deps | +10 |
 | `src/main.rs` | Initialize project, register file browser | +20 |
 | `src/ui/workspace.rs` | Add file_browser_pane, event subscription | +100 |
-| `src/ui/workspace_config.rs` | Add FileBrowserState | +30 |
+| `src/ui/workspace_config.rs` | Add FileBrowserPersistedState | +30 |
 | `src/terminal/pane.rs` | Add spawn_terminal_with_directory method | +10 |
 
 **Total Modified Code:** ~170 lines
@@ -1184,7 +1244,7 @@ actions!(
 **Sections:**
 1. Imports and type definitions (50 lines)
 2. FileBrowserPane struct (40 lines)
-3. FileBrowserState struct (30 lines)
+3. FileBrowserPersistedState struct (30 lines)
 4. EditState, ClipboardEntry enums (20 lines)
 5. Lifecycle methods (new, set_active_workspace) (60 lines)
 6. Tree management (update_visible_entries, build_flattened_tree) (150 lines)
@@ -1220,13 +1280,13 @@ actions!(
 
 ---
 
-## 10. Build Sequence (Phased Implementation)
+## 10. Build Sequence (Wave-Based Implementation)
 
-### Phase 1: Foundation (2-3 hours)
+### Wave 1: Foundation (2-3 hours)
 
 **Goal:** Basic tree rendering, no interactions
 
-- [ ] Add project, fs, worktree, git crate dependencies to Cargo.toml
+- [ ] Add Zed crates: project, worktree, git, fs, editor, file_icons (and any UI helpers used by context menus) to Cargo.toml
 - [ ] Create `src/file_browser/mod.rs` with action definitions
 - [ ] Create `src/file_browser/state.rs` with build_flattened_tree stub
 - [ ] Create `src/file_browser/pane.rs` with minimal FileBrowserPane
@@ -1240,13 +1300,13 @@ actions!(
 
 **Checkpoint:** App runs, left pane shows "File Browser" placeholder
 
-### Phase 2: Tree Rendering (2-3 hours)
+### Wave 2: Tree Rendering (2-3 hours)
 
 **Goal:** Display static tree with icons, no interactions
 
 - [ ] Implement build_flattened_tree in state.rs
   - [ ] Traverse worktree depth-first
-  - [ ] Include all entries (no filtering yet)
+  - [ ] Include all entries (filter hidden files only if global setting enabled)
   - [ ] Return Vec<GitEntry>
 - [ ] Create `src/file_browser/render.rs`
   - [ ] EntryDetails struct
@@ -1260,11 +1320,11 @@ actions!(
 
 **Checkpoint:** Tree renders with files/folders, icons, git status indicators
 
-### Phase 3: Expand/Collapse (1-2 hours)
+### Wave 3: Expand/Collapse (1-2 hours)
 
 **Goal:** Interactive tree with expand/collapse
 
-- [ ] Add expanded_dir_ids to FileBrowserState
+- [ ] Add expanded_dir_ids to FileBrowserRuntimeState
 - [ ] Implement binary search utilities in state.rs
   - [ ] is_expanded
   - [ ] expand_dir
@@ -1278,11 +1338,11 @@ actions!(
 
 **Checkpoint:** Tree expand/collapse functional via mouse and keyboard
 
-### Phase 4: Selection (1 hour)
+### Wave 4: Selection (1 hour)
 
 **Goal:** Single and multi-selection with visual feedback
 
-- [ ] Add selection, marked_entries to FileBrowserState
+- [ ] Add selection, marked_entries to FileBrowserRuntimeState
 - [ ] Implement select_entry, toggle_marked in pane.rs
 - [ ] Update render_entry to highlight selected/marked entries
 - [ ] Add mouse click handlers with modifier detection
@@ -1295,7 +1355,7 @@ actions!(
 
 **Checkpoint:** Selection works via mouse and keyboard
 
-### Phase 5: Context Menu (1 hour)
+### Wave 5: Context Menu (1 hour)
 
 **Goal:** Right-click context menu with stub actions
 
@@ -1311,7 +1371,7 @@ actions!(
 
 **Checkpoint:** Context menu displays and dismisses correctly
 
-### Phase 6: File Operations (2-3 hours)
+### Wave 6: File Operations (2-3 hours)
 
 **Goal:** New file, new folder, delete with confirmation
 
@@ -1337,7 +1397,7 @@ actions!(
 
 **Checkpoint:** New file, new folder, delete working
 
-### Phase 7: Copy/Paste, Rename (1-2 hours)
+### Wave 7: Copy/Paste, Rename (1-2 hours)
 
 **Goal:** Copy/cut/paste and rename operations
 
@@ -1354,7 +1414,7 @@ actions!(
 
 **Checkpoint:** Copy/paste, rename working
 
-### Phase 8: Additional Actions (1 hour)
+### Wave 8: Additional Actions (1 hour)
 
 **Goal:** Copy path, reveal in finder, collapse all
 
@@ -1368,7 +1428,7 @@ actions!(
 
 **Checkpoint:** All context menu actions working
 
-### Phase 9: "Open in Terminal" Integration (30 min)
+### Wave 9: "Open in Terminal" Integration (30 min)
 
 **Goal:** Open folder in terminal
 
@@ -1381,27 +1441,28 @@ actions!(
 
 **Checkpoint:** "Open in Terminal" functional
 
-### Phase 10: State Persistence (1 hour)
+### Wave 10: State Persistence (1 hour)
 
 **Goal:** Save/restore expanded dirs, scroll position, selection
 
-- [ ] Add FileBrowserState to WorkspaceConfig
+- [ ] Add FileBrowserPersistedState to WorkspaceConfig
 - [ ] Implement save_state in FileBrowserPane
 - [ ] Implement load_state in FileBrowserPane
 - [ ] Call save_state on expand/collapse/selection changes
 - [ ] Call load_state on workspace switch
 - [ ] Hook into WorkspaceConfigStore auto-save
+- [ ] Pause file watching when pane hidden; on show, debounce a full refresh (~500ms)
 - [ ] Test: Expand folders, switch workspace, switch back -> folders still expanded
 - [ ] Test: Scroll position persists
 
 **Checkpoint:** File browser state persists across workspace switches
 
-### Phase 11: Auto-Fold & Polish (1 hour)
+### Wave 11: Auto-Fold & Polish (1 hour)
 
 **Goal:** Auto-fold single-child directories, final polish
 
 - [ ] Implement auto-fold logic in build_flattened_tree
-- [ ] Add unfolded_dir_ids to FileBrowserState (override auto-fold)
+- [ ] Add unfolded_dir_ids to FileBrowserRuntimeState (override auto-fold)
 - [ ] Add unfold_directory, fold_directory actions
 - [ ] Test: Single-child directories auto-fold
 - [ ] Test: Unfold action disables auto-fold
@@ -1442,6 +1503,7 @@ fn is_expanded(entry_id: ProjectEntryId, expanded_dir_ids: &[ProjectEntryId]) ->
 fn update_visible_entries(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     let project = self.project.clone();
     let expanded_ids = self.get_active_state().expanded_dir_ids.clone();
+    let workspace_id = self.active_workspace_id.clone();
 
     self.update_tree_task = cx.spawn_in(window, |this, cx| async move {
         // Build tree in background
@@ -1449,7 +1511,7 @@ fn update_visible_entries(&mut self, window: &mut Window, cx: &mut Context<Self>
 
         // Update UI on main thread
         this.update(cx, |this, cx| {
-            if let Some(state) = this.state_by_workspace.get_mut(&this.active_workspace_id) {
+            if let Some(state) = this.state_by_workspace.get_mut(&workspace_id) {
                 state.visible_entries = entries;
             }
             cx.notify();
@@ -1457,6 +1519,10 @@ fn update_visible_entries(&mut self, window: &mut Window, cx: &mut Context<Self>
     });
 }
 ```
+
+**Visibility throttling:**
+- When the pane is hidden, pause project watching (or ignore updates).
+- When the pane becomes visible, trigger a full refresh with a ~500ms debounce to collapse bursts of FS events.
 
 ### 11.3 Filename Validation
 
@@ -1524,6 +1590,12 @@ fn should_auto_fold(entry: &GitEntry, worktree: &Worktree, unfolded_ids: &HashSe
     children.len() == 1 && children[0].kind == EntryKind::Directory
 }
 ```
+
+### 11.6 Hidden Files Filtering
+
+- Default: show hidden files/folders.
+- If global setting `file_browser.hide_hidden_files` is enabled, filter entries whose filename starts with `.`.
+- Apply filtering during `build_flattened_tree` so selection/expand logic operates only on visible entries.
 
 ---
 
@@ -1614,6 +1686,7 @@ async fn test_rename_validation(cx: &mut TestAppContext) {
 - [ ] Git status colors match git state
 - [ ] Auto-fold single-child directories
 - [ ] State persists across workspace switches
+- [ ] Hide file browser, modify files, re-show -> full refresh within ~500ms
 - [ ] Performance acceptable with 1000+ files
 - [ ] No crashes or errors in logs
 
@@ -1777,12 +1850,12 @@ fn validate_filename(filename: &str) -> Result<()> {
 
 **Question:** Show hidden files by default?
 
-**Recommendation:** Hide by default, toggle via context menu
-- Reduces clutter
-- Matches macOS Finder default
-- Easy to toggle when needed
+**Recommendation:** Show by default, allow hiding via global setting
+- Matches terminal-centric workflows (dotfiles visible)
+- Simple to implement as a global toggle
+- Avoids “where did my file go?” confusion
 
-**Decision:** Hide hidden files by default
+**Decision:** Show hidden files by default; add a global app setting to hide
 
 ---
 
@@ -1851,5 +1924,5 @@ fn validate_filename(filename: &str) -> Result<()> {
 ---
 
 **Document Status:** Complete
-**Next Steps:** Review design -> Create worktree -> Begin Phase 1 implementation
+**Next Steps:** Review design -> Create worktree -> Begin Wave 1 implementation
 **Estimated Total Effort:** 8-10 hours

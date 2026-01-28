@@ -2,6 +2,7 @@
 //!
 //! Implements workspace tab bar and three-pane layout with configurable visibility.
 
+use crate::file_browser::{FileBrowserPane, FileBrowserPaneEvent};
 use crate::terminal::{TerminalPane, TerminalPaneEvent};
 use crate::ui::workspace_config::WorkspaceConfigStore;
 use gpui::{
@@ -117,6 +118,12 @@ pub struct WorkspaceView {
     /// Workspace configuration store
     config_store: WorkspaceConfigStore,
 
+    /// File browser pane entity
+    file_browser_pane: Entity<FileBrowserPane>,
+
+    /// Subscription to file browser pane events
+    _file_browser_subscription: Subscription,
+
     /// Terminal pane entity
     terminal_pane: Entity<TerminalPane>,
 
@@ -175,9 +182,11 @@ impl WorkspaceView {
         }
 
         // Create terminal pane with workspace root as working directory
-        let working_directory = Some(config_store.workspace_root().to_path_buf());
+        let workspace_root = config_store.workspace_root().to_path_buf();
+        let working_directory = Some(workspace_root.clone());
         let workspace_id = config_store.active_workspace().id.clone();
-        let terminal_pane = cx.new(|cx| TerminalPane::new(workspace_id, working_directory, cx));
+        let terminal_pane =
+            cx.new(|cx| TerminalPane::new(workspace_id.clone(), working_directory, cx));
 
         // Subscribe to terminal pane events
         let terminal_subscription = cx.subscribe(&terminal_pane, |_this, _pane, event, cx| {
@@ -193,8 +202,30 @@ impl WorkspaceView {
             }
         });
 
+        // Create file browser pane
+        let file_browser_pane =
+            cx.new(|cx| FileBrowserPane::new(workspace_id.clone(), workspace_root.clone(), cx));
+
+        // Subscribe to file browser pane events
+        let file_browser_subscription =
+            cx.subscribe(&file_browser_pane, |this, _pane, event, cx| match event {
+                FileBrowserPaneEvent::OpenFile(path) => {
+                    tracing::info!("Open file requested: {:?}", path);
+                    // TODO: Wire up to document viewer once implemented
+                }
+                FileBrowserPaneEvent::OpenInTerminal(path) => {
+                    tracing::info!("Open in terminal requested: {:?}", path);
+                    this.handle_open_in_terminal(path.clone(), cx);
+                }
+                FileBrowserPaneEvent::SelectionChanged(path) => {
+                    tracing::debug!("File browser selection changed: {:?}", path);
+                }
+            });
+
         Self {
             config_store,
+            file_browser_pane,
+            _file_browser_subscription: file_browser_subscription,
             terminal_pane,
             _terminal_subscription: terminal_subscription,
             save_task: None,
@@ -217,11 +248,47 @@ impl WorkspaceView {
         }
         let workspace_id = self.config_store.active_workspace().id.clone();
         let working_directory = Some(workspace_root.to_path_buf());
+
+        // Update file browser pane
+        self.file_browser_pane.update(cx, |file_browser_pane, cx| {
+            file_browser_pane.set_active_workspace(
+                workspace_id.clone(),
+                workspace_root.to_path_buf(),
+                cx,
+            );
+        });
+
+        // Update terminal pane
         self.terminal_pane.update(cx, |terminal_pane, cx| {
             terminal_pane.set_active_workspace(workspace_id, working_directory, cx);
         });
+
         cx.notify();
         self.schedule_save(cx);
+    }
+
+    /// Handle `OpenInTerminal` event from file browser
+    fn handle_open_in_terminal(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
+        // Ensure the terminal pane is visible
+        let ws = self.config_store.active_workspace_mut();
+        if !ws.terminal_visible {
+            ws.terminal_visible = true;
+            self.schedule_save(cx);
+        }
+
+        // Spawn a new terminal tab with the directory as working directory
+        let workspace_id = self.config_store.active_workspace().id.clone();
+        let working_directory = if path.is_dir() {
+            Some(path)
+        } else {
+            path.parent().map(std::path::Path::to_path_buf)
+        };
+
+        self.terminal_pane.update(cx, |terminal_pane, cx| {
+            terminal_pane.spawn_terminal(workspace_id, working_directory, cx);
+        });
+
+        cx.notify();
     }
 
     /// Toggle pane visibility
@@ -568,9 +635,22 @@ impl WorkspaceView {
             })
     }
 
-    /// Render a single pane (terminal uses real component, others are placeholders)
+    /// Render a single pane (file browser and terminal use real components, doc viewer is placeholder)
     fn render_pane(&self, pane_type: PaneType, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+
+        // File browser pane renders the actual FileBrowserPane component
+        if pane_type == PaneType::FileBrowser {
+            return div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .m_2()
+                .bg(theme.colors().panel_background)
+                .rounded_md()
+                .overflow_hidden()
+                .child(self.file_browser_pane.clone());
+        }
 
         // Terminal pane renders the actual TerminalPane component
         if pane_type == PaneType::Terminal {
@@ -603,12 +683,8 @@ impl WorkspaceView {
                 .child(self.terminal_pane.clone());
         }
 
-        // Other panes render placeholders
-        let label = match pane_type {
-            PaneType::FileBrowser => "File Browser",
-            PaneType::Terminal => unreachable!(),
-            PaneType::DocumentViewer => "Document Viewer",
-        };
+        // Document viewer renders placeholder
+        let label = "Document Viewer";
 
         div()
             .flex_1()
