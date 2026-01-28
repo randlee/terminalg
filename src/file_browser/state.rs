@@ -323,7 +323,7 @@ mod tests {
         let entries = build_entries_from_fs(root);
         let paths: Vec<String> = entries
             .iter()
-            .map(|entry| entry.path.to_string_lossy().to_string())
+            .map(|entry| entry.path.to_string_lossy().replace('\\', "/"))
             .collect();
 
         assert_eq!(paths, vec!["src", "src/main.rs", "b.txt"]);
