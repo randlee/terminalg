@@ -6,8 +6,8 @@
 use collections::HashMap;
 use gpui::{
     div, prelude::*, px, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled, Task,
-    Window,
+    KeyDownEvent, ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    Render, Styled, Task, Window,
 };
 use settings::Settings;
 use std::path::PathBuf;
@@ -23,6 +23,7 @@ use crate::terminal::tab::TerminalTab;
 
 /// Default regex patterns for detecting file paths in terminal output.
 /// Note: These can be noisy. Consider gating behind a setting if false positives are an issue.
+#[cfg(test)]
 const DEFAULT_PATH_REGEXES: &[&str] = &[
     // File paths with optional line:col
     r"[a-zA-Z0-9._\-~/]+/[a-zA-Z0-9._\-~/]+(?::\d+)?(?::\d+)?",
@@ -51,6 +52,8 @@ pub struct TerminalPane {
     working_directory_by_workspace: HashMap<String, Option<PathBuf>>,
     /// Focus handle for keyboard input
     focus_handle: FocusHandle,
+    /// Currently hovered URL (cached from navigation target events)
+    hovered_url: Option<String>,
 }
 
 impl TerminalPane {
@@ -67,6 +70,7 @@ impl TerminalPane {
             active_tab_by_workspace: HashMap::default(),
             working_directory_by_workspace: HashMap::default(),
             focus_handle,
+            hovered_url: None,
         };
 
         // Spawn initial terminal
@@ -102,11 +106,9 @@ impl TerminalPane {
             .insert(workspace_id, working_directory.clone());
         let working_dir = working_directory.clone();
 
-        // Prepare path hyperlink regex patterns
-        let path_hyperlink_regexes: Vec<String> = DEFAULT_PATH_REGEXES
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect();
+        // Keep path hyperlink regexes empty for Sprint 2.3 to avoid false positives.
+        // Path regex support can be enabled in a later sprint behind a setting.
+        let path_hyperlink_regexes: Vec<String> = Vec::new();
 
         // Spawn terminal asynchronously
         let terminal_task: Task<anyhow::Result<TerminalBuilder>> = TerminalBuilder::new(
@@ -237,10 +239,13 @@ impl TerminalPane {
         target: &Option<MaybeNavigationTarget>,
         cx: &mut Context<Self>,
     ) {
-        if let Some(MaybeNavigationTarget::Url(url)) = target {
-            tracing::debug!("Hovering URL: {}", url);
-        }
-        // Ensure hover state clears immediately when target becomes None
+        self.hovered_url = match target {
+            Some(MaybeNavigationTarget::Url(url)) => {
+                tracing::debug!("Hovering URL: {}", url);
+                Some(url.clone())
+            }
+            _ => None,
+        };
         cx.notify();
     }
 
@@ -350,6 +355,18 @@ impl TerminalPane {
         }
     }
 
+    fn has_terminal_cells(&self, cx: &Context<Self>) -> bool {
+        self.tabs_by_workspace
+            .get(&self.active_workspace_id)
+            .and_then(|tabs| {
+                let index = self
+                    .active_tab_by_workspace
+                    .get(&self.active_workspace_id)?;
+                tabs.get(*index)
+            })
+            .is_some_and(|tab| !tab.terminal.read(cx).last_content().cells.is_empty())
+    }
+
     /// Handle mouse move events - forwards to Zed terminal for hyperlink detection
     fn handle_mouse_move(
         &mut self,
@@ -357,15 +374,15 @@ impl TerminalPane {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.has_terminal_cells(cx) {
+            return;
+        }
+
         if let Some(tab) = self.active_tab_mut() {
-            // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
-            let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
-            if has_content {
-                tab.terminal.update(cx, |terminal, cx| {
-                    terminal.mouse_move(event, cx);
-                });
-                cx.notify();
-            }
+            tab.terminal.update(cx, |terminal, cx| {
+                terminal.mouse_move(event, cx);
+            });
+            cx.notify();
         }
     }
 
@@ -379,15 +396,15 @@ impl TerminalPane {
         // Focus the terminal pane on click
         self.focus_handle.focus(window, cx);
 
+        if !self.has_terminal_cells(cx) {
+            return;
+        }
+
         if let Some(tab) = self.active_tab_mut() {
-            // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
-            let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
-            if has_content {
-                tab.terminal.update(cx, |terminal, cx| {
-                    terminal.mouse_down(event, cx);
-                });
-                cx.notify();
-            }
+            tab.terminal.update(cx, |terminal, cx| {
+                terminal.mouse_down(event, cx);
+            });
+            cx.notify();
         }
     }
 
@@ -398,15 +415,27 @@ impl TerminalPane {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.has_terminal_cells(cx) {
+            return;
+        }
+
         if let Some(tab) = self.active_tab_mut() {
-            // Check terminal's current cells to avoid index out of bounds in Zed's mouse handlers
-            let has_content = !tab.terminal.read(cx).last_content().cells.is_empty();
-            if has_content {
-                tab.terminal.update(cx, |terminal, cx| {
-                    terminal.mouse_up(event, cx);
-                });
-                cx.notify();
-            }
+            tab.terminal.update(cx, |terminal, cx| {
+                terminal.mouse_up(event, cx);
+            });
+            cx.notify();
+        }
+    }
+
+    fn handle_modifiers_changed(
+        &mut self,
+        event: &ModifiersChangedEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !event.modifiers.secondary() && self.hovered_url.is_some() {
+            self.hovered_url = None;
+            cx.notify();
         }
     }
 
@@ -477,8 +506,9 @@ impl TerminalPane {
     #[allow(clippy::needless_pass_by_ref_mut)] // GPUI read requires context
     #[allow(clippy::option_if_let_else)] // if-let is more readable here
     /// Render the terminal content area using the custom `TerminalElement`
-    fn render_terminal_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_terminal_content(&self, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
         let theme = cx.theme();
+        let hovered_url = self.hovered_url.clone();
 
         let tabs: &[TerminalTab] = match self.tabs_by_workspace.get(&self.active_workspace_id) {
             Some(tabs) => tabs.as_slice(),
@@ -492,15 +522,35 @@ impl TerminalPane {
         if let Some(tab) = tabs.get(active_tab_index) {
             // Use the custom TerminalElement for proper sizing
             div()
+                .id("terminal-content")
                 .flex_1()
                 .w_full()
+                .relative()
                 .overflow_hidden()
                 .child(TerminalElement::new(
                     tab.terminal.clone(),
                     ("terminal-content", active_tab_index),
                 ))
+                .when_some(hovered_url, |d, url| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .bottom_0()
+                            .left_0()
+                            .right_0()
+                            .px_2()
+                            .py_1()
+                            .bg(theme.colors().element_background)
+                            .border_t_1()
+                            .border_color(theme.colors().border)
+                            .text_xs()
+                            .text_color(theme.colors().link_text_hover)
+                            .child(url),
+                    )
+                })
         } else {
             div()
+                .id("terminal-content")
                 .flex_1()
                 .w_full()
                 .flex()
@@ -523,16 +573,22 @@ impl Focusable for TerminalPane {
 
 impl Render for TerminalPane {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let hovering_url = self.hovered_url.is_some();
+        let terminal_content = self
+            .render_terminal_content(cx)
+            .when(hovering_url, gpui::Styled::cursor_pointer)
+            .on_mouse_move(cx.listener(Self::handle_mouse_move))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
+            .on_modifiers_changed(cx.listener(Self::handle_modifiers_changed));
+
         div()
             .track_focus(&self.focus_handle)
             .flex()
             .flex_col()
             .size_full()
             .on_key_down(cx.listener(Self::handle_key_down))
-            .on_mouse_move(cx.listener(Self::handle_mouse_move))
-            .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
-            .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
-            .child(self.render_terminal_content(cx))
+            .child(terminal_content)
             .child(self.render_tabs(cx))
     }
 }
@@ -596,7 +652,8 @@ fn strip_line_col_suffix(path: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{clamp_active_index, strip_line_col_suffix};
+    use super::{clamp_active_index, strip_line_col_suffix, DEFAULT_PATH_REGEXES};
+    use regex::Regex;
 
     #[test]
     fn clamp_active_index_handles_empty() {
@@ -645,5 +702,39 @@ mod tests {
     #[test]
     fn strip_line_col_suffix_non_numeric_tail() {
         assert_eq!(strip_line_col_suffix("/tmp/foo:bar"), "/tmp/foo:bar");
+    }
+
+    // URL/Path regex pattern tests
+    #[test]
+    fn path_regex_matches_simple_paths() {
+        let regex = Regex::new(DEFAULT_PATH_REGEXES[0]).unwrap();
+        assert!(regex.is_match("src/main.rs"));
+        assert!(regex.is_match("./foo/bar"));
+        assert!(regex.is_match("/absolute/path/file.txt"));
+    }
+
+    #[test]
+    fn path_regex_matches_paths_with_line_numbers() {
+        let regex = Regex::new(DEFAULT_PATH_REGEXES[0]).unwrap();
+        assert!(regex.is_match("src/main.rs:12"));
+        assert!(regex.is_match("src/main.rs:12:5"));
+    }
+
+    #[test]
+    fn path_regex_matches_source_file_extensions() {
+        let regex = Regex::new(DEFAULT_PATH_REGEXES[1]).unwrap();
+        assert!(regex.is_match("main.rs"));
+        assert!(regex.is_match("script.py"));
+        assert!(regex.is_match("index.js"));
+        assert!(regex.is_match("app.ts"));
+        assert!(regex.is_match("README.md"));
+    }
+
+    #[test]
+    fn path_regex_matches_nested_source_files() {
+        let regex = Regex::new(DEFAULT_PATH_REGEXES[1]).unwrap();
+        assert!(regex.is_match("src/lib.rs"));
+        assert!(regex.is_match("tests/integration/test.py"));
+        assert!(regex.is_match("./relative/path/file.go"));
     }
 }

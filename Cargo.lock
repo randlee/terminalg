@@ -6093,6 +6093,7 @@ dependencies = [
  "gpui",
  "notify 6.1.1",
  "open",
+ "regex",
  "serde",
  "serde_json",
  "settings",
