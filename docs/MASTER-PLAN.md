@@ -2,7 +2,7 @@
 
 **Version:** 1.4
 **Last Updated:** 2026-01-27
-**Current Phase:** Phase 2 Complete (Sprint 2.3 merged - PR #21)
+**Current Phase:** Phase 3 In Progress (Sprint 3.1 - PR #22 pending)
 **Dependency Strategy:** See `docs/architecture/zed-reuse-strategy.md`
 **License:** GPL-3.0-or-later (required by Zed crate dependencies)
 
@@ -30,7 +30,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 |-------|------|--------|-----------------|---------|
 | 1 | Foundation & Workspace | ✅ Complete | 20-25 | 5 |
 | 2 | Zed Terminal Integration | ✅ Complete | 20-30 | 3 |
-| 3 | File/Folder Browser | Not Started | 15-20 | 2 |
+| 3 | File/Folder Browser | 🔄 In Progress | 15-20 | 2 |
 | 4 | Markdown Viewer | Not Started | 15-20 | 2 |
 | 5 | Markdown Editor (MVP) | Not Started | 10-15 | 2 |
 
@@ -272,7 +272,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 **Priority:** 3 - Add file/folder browser
 
-**Status:** Not started
+**Status:** 🔄 In Progress (Sprint 3.1 PR #22 pending review)
 
 **Dependencies:** Phase 1-2 complete
 
@@ -280,22 +280,25 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 ### Sprints
 
-#### Sprint 3.1: File Browser Core
+#### Sprint 3.1: File Browser Core 🔄 IN PROGRESS
 **Duration:** 8-10 hours
 **Parallel:** No
+**PR:** #22 (pending review/CI)
+**Design Doc:** `docs/sprints/phase-3-sprint-1-design.md`
 
-**Need to plan sprint:** Detailed implementation checklist
-
-**High-Level Tasks:**
-- [ ] Create `src/ui/file_browser.rs` - FileBrowserPane
-- [ ] Implement file tree data structure
-- [ ] Display file/folder tree (rooted at workspace folder)
-- [ ] Implement expand/collapse directories
-- [ ] Implement file selection
-- [ ] Apply theme colors
-- [ ] Test: Browse directories
-- [ ] Test: Expand/collapse works
-- [ ] Test: File selection works
+**Implementation Status (Wave 2 Complete):**
+- [x] Create `src/file_browser/` module structure
+- [x] FileBrowserPane component with per-workspace state
+- [x] Virtualized tree rendering with `uniform_list`
+- [x] Binary search utilities for O(log n) expand/collapse
+- [x] Keyboard navigation (Up/Down/Left/Right/Enter/Space)
+- [x] Context menu builder for file operations
+- [x] Entry rendering with git status indicator support
+- [x] Workspace integration (OpenInTerminal spawns terminal)
+- [x] 31 file browser tests passing
+- [ ] Project crate integration (actual filesystem - Wave 3)
+- [ ] File operations (copy/cut/paste/delete - Wave 4)
+- [ ] State persistence (Wave 5)
 
 #### Sprint 3.2: File Browser Integration
 **Duration:** 6-8 hours
