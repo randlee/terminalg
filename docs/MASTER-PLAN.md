@@ -1,8 +1,8 @@
 # TerminalG Master Plan
 
-**Version:** 1.3
-**Last Updated:** 2026-01-25
-**Current Phase:** Phase 2 (Sprint 2.2 complete - PR #14 merged)
+**Version:** 1.4
+**Last Updated:** 2026-01-27
+**Current Phase:** Phase 2 Complete (Sprint 2.3 merged - PR #21)
 **Dependency Strategy:** See `docs/architecture/zed-reuse-strategy.md`
 **License:** GPL-3.0-or-later (required by Zed crate dependencies)
 
@@ -29,7 +29,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 | Phase | Name | Status | Estimated Hours | Sprints |
 |-------|------|--------|-----------------|---------|
 | 1 | Foundation & Workspace | ✅ Complete | 20-25 | 5 |
-| 2 | Zed Terminal Integration | 66% (Sprint 2.2 complete) | 20-30 | 3 |
+| 2 | Zed Terminal Integration | ✅ Complete | 20-30 | 3 |
 | 3 | File/Folder Browser | Not Started | 15-20 | 2 |
 | 4 | Markdown Viewer | Not Started | 15-20 | 2 |
 | 5 | Markdown Editor (MVP) | Not Started | 10-15 | 2 |
@@ -157,7 +157,7 @@ Development organized into 5 phases, each containing sprints that can be execute
 
 **Priority:** 2 - Fully working Zed terminal (all features, all platforms)
 
-**Status:** 66% complete (Sprint 2.1 ✅, Sprint 2.2 ✅, Sprint 2.3 pending)
+**Status:** ✅ Complete (Sprint 2.1 ✅, Sprint 2.2 ✅, Sprint 2.3 ✅)
 
 **Dependencies:** Phase 1 complete ✅
 
@@ -222,24 +222,33 @@ Development organized into 5 phases, each containing sprints that can be execute
 - `src/terminal/mod.rs`
 - `src/ui/workspace.rs`
 
-#### Sprint 2.3: URL Recognition & Clicking
+#### Sprint 2.3: URL Recognition & Clicking ✅ COMPLETE
 **Duration:** 6-10 hours
 **Parallel:** No (depends on Sprint 2.2)
-**Status:** Not Started
+**Status:** Complete
 
-**High-Level Tasks:**
-- [ ] Add URL regex detection to terminal output
-- [ ] Store URL → screen region mapping
-- [ ] Implement click detection on URLs
-- [ ] Open URL in default browser
-- [ ] Style URLs (color, underline on hover)
-- [ ] Test: URLs detected correctly
-- [ ] Test: Clicking URLs opens browser
-- [ ] Test: Works across scrolling
+**Completed Tasks:**
+- [x] Add URL/path regex detection patterns to terminal configuration
+- [x] Wire mouse event handlers for hyperlink detection via Zed terminal
+- [x] Implement click-to-open URLs via `open` crate
+- [x] Add hover state caching (hovered_url field)
+- [x] Show pointer cursor when hovering clickable URLs
+- [x] Display URL footer bar at bottom of terminal content
+- [x] Add guards for empty terminal content (prevent panics)
+- [x] Clear hover state when modifier key released
+- [x] Focus terminal on click for proper modifier handling
+- [x] Add regex pattern tests (4 new tests)
+- [x] 76/76 tests passing, clippy clean
 
-**Key Point:** Design for potential PR back to Zed - keep implementation clean and modular
+**Files Modified:**
+- `src/terminal/pane.rs` - hover state, mouse handlers, URL footer
+- `Cargo.toml` - added `regex` dev-dependency
 
-### Phase 2 Checkpoint
+**Design Doc:** `docs/sprints/phase-2-sprint-3-design.md`
+**QA Report:** `docs/sprints/phase-2-sprint-3-qa.md`
+**PR:** https://github.com/randlee/terminalg/pull/21 (merged)
+
+### Phase 2 Checkpoint ✅ COMPLETE
 
 **Complete when:**
 - [x] PTY spawning and lifecycle managed by Zed ✅
@@ -248,11 +257,12 @@ Development organized into 5 phases, each containing sprints that can be execute
 - [x] Terminal tabs functional ✅
 - [x] Theme applied correctly ✅
 - [x] Settings applied correctly ✅
+- [x] URL recognition and clicking ✅ (Sprint 2.3)
+- [x] Hover state with visual feedback ✅ (pointer cursor + URL footer)
 - [ ] GPU-accelerated rendering (basic text rendering complete, GPU optimization future)
-- [ ] URL recognition and clicking (Sprint 2.3)
-- [ ] Copy/paste, mouse, search (future enhancement)
+- [ ] Copy/paste, mouse selection, search (future enhancement)
 
-**Ready for:** Phase 3 (File Browser) after Sprint 2.3 or can proceed in parallel
+**Ready for:** Phase 3 (File Browser)
 
 ---
 
@@ -540,16 +550,32 @@ Phase 5 (Markdown Editor - MVP)
 - 63/63 tests passing, clippy clean, CI green on all platforms
 - PR #14: https://github.com/randlee/terminalg/pull/14 (merged)
 
-### In Progress
+**Session 6:** 2026-01-27 (~4 hours)
 
-**Phase 2:** Sprint 2.2 complete, PR #14 merged
-- Sprint 2.3 (URL Recognition) not yet started
-- Can proceed to Phase 3 in parallel if desired
+**Sprint 2.3:** URL Recognition & Clicking ✅
+- Implemented hover state caching (`hovered_url` field in TerminalPane)
+- Added pointer cursor when hovering clickable URLs
+- Added URL footer bar at bottom of terminal content
+- Wired mouse event handlers for hyperlink detection
+- Added guards for empty terminal content (prevents panics)
+- Added modifier clearing in mouse_move (fixes stuck hover state)
+- Added focus on click for proper modifier handling
+- Added 4 regex pattern tests
+- Addressed ARCH-CODEX review findings (high/medium severity issues)
+- Resolved merge conflicts with develop (integrated TerminalElement)
+- 76/76 tests passing, clippy clean
+- PR #21 merged
+
+### Next Steps
+
+**Phase 3:** File/Folder Browser (Sprint 3.1)
+- Ready to start immediately
+- See Sprint 3.1 tasks below
 
 ### Effort Summary
 
-**Used:** ~28-32 hours (Phase 1 complete, Phase 2 66% complete)
-**Remaining:** 45-65 hours (Sprint 2.3 + Phases 3, 4, 5)
+**Used:** ~32-36 hours (Phase 1 complete, Phase 2 complete)
+**Remaining:** ~40-55 hours (Phases 3, 4, 5)
 
 ---
 
