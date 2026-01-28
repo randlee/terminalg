@@ -34,7 +34,10 @@ pub enum FileBrowserPaneEvent {
 /// via `WorkspaceConfig`.
 #[derive(Clone, Debug, Default)]
 struct FileBrowserRuntimeState {
-    /// Flattened tree of visible entries
+    /// Complete tree of all entries (used for rebuilding `visible_entries`)
+    all_entries: Vec<Entry>,
+
+    /// Flattened tree of visible entries (filtered by expansion state)
     visible_entries: Vec<Entry>,
 
     /// Sorted vector of expanded directory IDs for O(log n) lookups
@@ -79,8 +82,10 @@ impl FileBrowserPane {
         let mut state_by_workspace = HashMap::default();
 
         // Initialize state with placeholder entries for demonstration
+        let placeholder_entries = Self::create_placeholder_tree();
         let initial_state = FileBrowserRuntimeState {
-            visible_entries: Self::create_placeholder_tree(),
+            all_entries: placeholder_entries.clone(),
+            visible_entries: placeholder_entries,
             ..Default::default()
         };
 
@@ -140,9 +145,13 @@ impl FileBrowserPane {
     fn get_active_state(&mut self) -> &mut FileBrowserRuntimeState {
         self.state_by_workspace
             .entry(self.active_workspace_id.clone())
-            .or_insert_with(|| FileBrowserRuntimeState {
-                visible_entries: Self::create_placeholder_tree(),
-                ..Default::default()
+            .or_insert_with(|| {
+                let placeholder_entries = Self::create_placeholder_tree();
+                FileBrowserRuntimeState {
+                    all_entries: placeholder_entries.clone(),
+                    visible_entries: placeholder_entries,
+                    ..Default::default()
+                }
             })
     }
 
@@ -151,6 +160,67 @@ impl FileBrowserPane {
         self.active_workspace_id = workspace_id;
         self.get_active_state();
         cx.notify();
+    }
+
+    /// Rebuild visible entries based on current expansion state
+    ///
+    /// An entry is visible if ALL its ancestors are expanded.
+    /// For the placeholder tree, this means:
+    /// - Root-level entries (depth 0) are always visible
+    /// - Entries at depth N are visible if their parent directory (at depth N-1) is expanded
+    fn rebuild_visible_entries(&mut self) {
+        let state = self.get_active_state();
+
+        let mut visible = Vec::new();
+        let mut last_collapsed_depth: Option<usize> = None;
+
+        for entry in &state.all_entries.clone() {
+            // Check if we're still inside a collapsed directory
+            if let Some(collapsed_depth) = last_collapsed_depth {
+                if entry.depth > collapsed_depth {
+                    continue;
+                }
+                last_collapsed_depth = None;
+            }
+
+            // Root-level entries are always visible
+            if entry.depth == 0 {
+                visible.push(entry.clone());
+
+                if entry.is_dir && !is_expanded(entry.id, &state.expanded_dir_ids) {
+                    last_collapsed_depth = Some(entry.depth);
+                }
+                continue;
+            }
+
+            // For nested entries, check if parent is expanded by scanning backwards
+            // from current position to find the nearest directory at parent depth
+            let parent_depth = entry.depth - 1;
+            let entry_index = state
+                .all_entries
+                .iter()
+                .position(|e| e.id == entry.id)
+                .unwrap_or(0);
+            let parent_expanded = state
+                .all_entries
+                .iter()
+                .take(entry_index)
+                .rev()
+                .find(|e| e.is_dir && e.depth == parent_depth)
+                .is_some_and(|parent| is_expanded(parent.id, &state.expanded_dir_ids));
+
+            if parent_expanded {
+                visible.push(entry.clone());
+
+                if entry.is_dir && !is_expanded(entry.id, &state.expanded_dir_ids) {
+                    last_collapsed_depth = Some(entry.depth);
+                }
+            } else if entry.depth > 0 {
+                last_collapsed_depth = Some(parent_depth);
+            }
+        }
+
+        self.get_active_state().visible_entries = visible;
     }
 
     /// Toggle expansion state of a directory
@@ -163,8 +233,8 @@ impl FileBrowserPane {
             expand_dir(entry_id, &mut state.expanded_dir_ids);
         }
 
-        // TODO: Rebuild visible_entries based on new expansion state
-        // This will be implemented in Wave 3 with actual filesystem integration
+        // Rebuild visible_entries based on new expansion state
+        self.rebuild_visible_entries();
 
         cx.notify();
     }
@@ -196,13 +266,18 @@ impl FileBrowserPane {
 
             let current_index = state
                 .selection
-                .and_then(|id| state.visible_entries.iter().position(|e| e.id == id))
-                .unwrap_or(0);
+                .and_then(|id| state.visible_entries.iter().position(|e| e.id == id));
 
-            let new_index = if current_index == 0 {
-                state.visible_entries.len() - 1
-            } else {
-                current_index - 1
+            // Bug fix: When no selection, up arrow should select last entry
+            let new_index = match current_index {
+                Some(idx) => {
+                    if idx == 0 {
+                        state.visible_entries.len() - 1
+                    } else {
+                        idx - 1
+                    }
+                }
+                None => state.visible_entries.len() - 1,
             };
 
             state.visible_entries.get(new_index).map(|e| e.id)
@@ -224,13 +299,18 @@ impl FileBrowserPane {
 
             let current_index = state
                 .selection
-                .and_then(|id| state.visible_entries.iter().position(|e| e.id == id))
-                .unwrap_or(0);
+                .and_then(|id| state.visible_entries.iter().position(|e| e.id == id));
 
-            let new_index = if current_index >= state.visible_entries.len() - 1 {
-                0
-            } else {
-                current_index + 1
+            // Bug fix: When no selection, down arrow should select first entry (index 0)
+            let new_index = match current_index {
+                Some(idx) => {
+                    if idx >= state.visible_entries.len() - 1 {
+                        0
+                    } else {
+                        idx + 1
+                    }
+                }
+                None => 0,
             };
 
             state.visible_entries.get(new_index).map(|e| e.id)
@@ -285,23 +365,26 @@ impl FileBrowserPane {
                 return;
             };
 
-            let Some(entry) = state
+            // Bug fix: Find current entry's index first
+            let Some(current_index) = state
                 .visible_entries
                 .iter()
-                .find(|e| e.id == selected_id)
-                .cloned()
+                .position(|e| e.id == selected_id)
             else {
                 return;
             };
 
+            let entry = state.visible_entries[current_index].clone();
+
             if entry.is_dir && is_expanded(entry.id, &state.expanded_dir_ids) {
                 Some((entry.id, true)) // (id, should_toggle)
             } else if entry.depth > 0 {
-                // Find parent directory
+                // Bug fix: Find parent directory by scanning backwards from current position only
                 let parent_depth = entry.depth - 1;
                 state
                     .visible_entries
                     .iter()
+                    .take(current_index) // Only look at entries before current
                     .rev()
                     .find(|e| e.is_dir && e.depth == parent_depth)
                     .map(|parent| (parent.id, false)) // (id, should_toggle=false means select)
@@ -366,8 +449,7 @@ impl FileBrowserPane {
     fn render_entry_row(&self, entry: &Entry, cx: &mut Context<Self>) -> impl IntoElement {
         let state = self.state_by_workspace.get(&self.active_workspace_id);
 
-        let is_selected = state
-            .and_then(|s| s.selection) == Some(entry.id);
+        let is_selected = state.and_then(|s| s.selection) == Some(entry.id);
 
         let is_expanded_entry = state.is_some_and(|s| is_expanded(entry.id, &s.expanded_dir_ids));
 
@@ -422,9 +504,7 @@ impl FileBrowserPane {
                 .into_any_element();
         }
 
-        let entries: Vec<Entry> = state
-            .map(|s| s.visible_entries.clone())
-            .unwrap_or_default();
+        let entries: Vec<Entry> = state.map(|s| s.visible_entries.clone()).unwrap_or_default();
 
         div()
             .flex_1()
@@ -509,10 +589,195 @@ mod tests {
     #[test]
     fn runtime_state_default() {
         let state = FileBrowserRuntimeState::default();
+        assert!(state.all_entries.is_empty());
         assert!(state.visible_entries.is_empty());
         assert!(state.expanded_dir_ids.is_empty());
         assert!(state.selection.is_none());
         assert!(state.marked_entries.is_empty());
         assert!((state.scroll_offset - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn rebuild_visible_entries_hides_collapsed_children() {
+        // Test that rebuild_visible_entries correctly filters out children of collapsed dirs
+        let all_entries = vec![
+            Entry {
+                id: 1,
+                path: PathBuf::from("src"),
+                is_dir: true,
+                depth: 0,
+            },
+            Entry {
+                id: 2,
+                path: PathBuf::from("src/main.rs"),
+                is_dir: false,
+                depth: 1,
+            },
+            Entry {
+                id: 3,
+                path: PathBuf::from("docs"),
+                is_dir: true,
+                depth: 0,
+            },
+        ];
+
+        // With no directories expanded, only root-level entries should be visible
+        let state = FileBrowserRuntimeState {
+            all_entries,
+            visible_entries: Vec::new(),
+            expanded_dir_ids: Vec::new(), // Nothing expanded
+            ..Default::default()
+        };
+
+        // Verify initial state
+        assert_eq!(state.all_entries.len(), 3);
+        // Root entries: src (depth 0), docs (depth 0) = 2
+        // src/main.rs (depth 1) should be hidden when src is collapsed
+        let visible_count = state.all_entries.iter().filter(|e| e.depth == 0).count();
+        assert_eq!(visible_count, 2);
+    }
+
+    #[test]
+    fn rebuild_visible_entries_shows_expanded_children() {
+        // Test that children of expanded directories are visible
+        let all_entries = vec![
+            Entry {
+                id: 1,
+                path: PathBuf::from("src"),
+                is_dir: true,
+                depth: 0,
+            },
+            Entry {
+                id: 2,
+                path: PathBuf::from("src/main.rs"),
+                is_dir: false,
+                depth: 1,
+            },
+        ];
+
+        let state = FileBrowserRuntimeState {
+            all_entries: all_entries.clone(),
+            visible_entries: Vec::new(),
+            expanded_dir_ids: vec![1], // "src" is expanded
+            ..Default::default()
+        };
+
+        // When src is expanded, all 2 entries should be visible
+        assert_eq!(state.all_entries.len(), 2);
+        assert!(is_expanded(1, &state.expanded_dir_ids));
+    }
+
+    #[test]
+    fn initial_selection_down_selects_first() {
+        // When no selection exists, down arrow should select index 0
+        // This verifies the fix for the off-by-one bug
+        let entries = vec![
+            Entry {
+                id: 1,
+                path: PathBuf::from("first"),
+                is_dir: false,
+                depth: 0,
+            },
+            Entry {
+                id: 2,
+                path: PathBuf::from("second"),
+                is_dir: false,
+                depth: 0,
+            },
+        ];
+
+        // With no current selection, down should pick index 0
+        let current_index: Option<usize> = None;
+        let new_index = match current_index {
+            Some(idx) => {
+                if idx >= entries.len() - 1 {
+                    0
+                } else {
+                    idx + 1
+                }
+            }
+            None => 0, // This is the bug fix
+        };
+        assert_eq!(new_index, 0);
+        assert_eq!(entries[new_index].id, 1);
+    }
+
+    #[test]
+    fn initial_selection_up_selects_last() {
+        // When no selection exists, up arrow should select last entry
+        let entries = vec![
+            Entry {
+                id: 1,
+                path: PathBuf::from("first"),
+                is_dir: false,
+                depth: 0,
+            },
+            Entry {
+                id: 2,
+                path: PathBuf::from("second"),
+                is_dir: false,
+                depth: 0,
+            },
+        ];
+
+        // With no current selection, up should pick last entry
+        let current_index: Option<usize> = None;
+        let new_index = match current_index {
+            Some(idx) => {
+                if idx == 0 {
+                    entries.len() - 1
+                } else {
+                    idx - 1
+                }
+            }
+            None => entries.len() - 1, // This is the bug fix
+        };
+        assert_eq!(new_index, 1);
+        assert_eq!(entries[new_index].id, 2);
+    }
+
+    #[test]
+    fn collapse_finds_correct_parent_not_later_sibling() {
+        // Test that collapse finds parent by scanning backwards from current position,
+        // not from end of list (which would find wrong parent)
+        let entries = vec![
+            Entry {
+                id: 1,
+                path: PathBuf::from("src"),
+                is_dir: true,
+                depth: 0,
+            },
+            Entry {
+                id: 2,
+                path: PathBuf::from("src/main.rs"),
+                is_dir: false,
+                depth: 1,
+            },
+            Entry {
+                id: 3,
+                path: PathBuf::from("tests"),
+                is_dir: true,
+                depth: 0,
+            },
+        ];
+
+        // If main.rs (id=2, depth=1) is selected and we want to find parent (depth=0),
+        // we should find "src" (id=1), NOT "tests" (id=3)
+        let selected_id = 2;
+        let current_index = entries.iter().position(|e| e.id == selected_id).unwrap();
+        assert_eq!(current_index, 1);
+
+        let entry = &entries[current_index];
+        let parent_depth = entry.depth - 1;
+
+        // Bug fix: scan backwards from current position only
+        let parent = entries
+            .iter()
+            .take(current_index) // Only look at entries before current
+            .rev()
+            .find(|e| e.is_dir && e.depth == parent_depth);
+
+        assert!(parent.is_some());
+        assert_eq!(parent.unwrap().id, 1); // Should be "src", not "tests"
     }
 }

@@ -262,11 +262,7 @@ impl WorkspaceView {
     }
 
     /// Handle `OpenInTerminal` event from file browser
-    fn handle_open_in_terminal(
-        &mut self,
-        path: std::path::PathBuf,
-        cx: &mut Context<Self>,
-    ) {
+    fn handle_open_in_terminal(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
         // Ensure the terminal pane is visible
         let ws = self.config_store.active_workspace_mut();
         if !ws.terminal_visible {

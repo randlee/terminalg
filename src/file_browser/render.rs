@@ -67,7 +67,10 @@ impl EntryDetails {
 /// Element representing the entry row
 #[allow(clippy::needless_pass_by_value)] // details is consumed
 #[allow(clippy::needless_pass_by_ref_mut)] // cx will be used for event handlers
-pub fn render_entry<V: 'static>(details: EntryDetails, cx: &mut gpui::Context<V>) -> impl IntoElement {
+pub fn render_entry<V: 'static>(
+    details: EntryDetails,
+    cx: &mut gpui::Context<V>,
+) -> impl IntoElement {
     let theme = cx.theme();
     #[allow(clippy::cast_precision_loss)] // depth will never exceed f32 precision
     let indent_width = details.depth as f32 * 16.0;
@@ -122,11 +125,11 @@ pub fn git_status_color<V: 'static>(status: &str, cx: &gpui::Context<V>) -> gpui
     let status_colors = theme.status();
 
     match status {
-        "A" | "?" => status_colors.created,   // Added/Untracked - green
-        "M" => status_colors.modified,        // Modified - yellow
-        "D" => status_colors.deleted,         // Deleted - red
-        "C" => status_colors.conflict,        // Conflict - purple
-        _ => theme.colors().text,             // Default
+        "A" | "?" => status_colors.created, // Added/Untracked - green
+        "M" => status_colors.modified,      // Modified - yellow
+        "D" => status_colors.deleted,       // Deleted - red
+        "C" => status_colors.conflict,      // Conflict - purple
+        _ => theme.colors().text,           // Default
     }
 }
 
