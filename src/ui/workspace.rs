@@ -7,8 +7,8 @@ use crate::terminal::{TerminalPane, TerminalPaneEvent};
 use crate::ui::workspace_config::WorkspaceConfigStore;
 use gpui::{
     div, prelude::*, px, relative, App, Bounds, ClickEvent, Element, ElementId, Entity,
-    GlobalElementId, IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels,
-    Render, Size, Style, Styled, Subscription, Task, WeakEntity, Window,
+    GlobalElementId, IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, Render, Size, Style, Styled, Subscription, Task, WeakEntity, Window,
 };
 use std::time::Duration;
 use theme::ActiveTheme;
@@ -366,6 +366,15 @@ impl WorkspaceView {
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
                     this.start_resize_drag(divider_index, event.position.x, total_width, cx);
+                }),
+            )
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _window, cx| {
+                this.handle_resize_drag(event.position.x, cx);
+            }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _event: &MouseUpEvent, _window, cx| {
+                    this.end_resize_drag(cx);
                 }),
             )
             .on_click(cx.listener(move |this, event: &ClickEvent, _window, cx| {
@@ -799,13 +808,12 @@ fn calculate_new_ratios(
         return ratios;
     }
 
-    let hidden_ratio_sum: f32 = ratios
+    let visible_ratio_total: f32 = ratios
         .iter()
         .enumerate()
-        .filter(|(i, _)| !visible[*i])
+        .filter(|(i, _)| visible[*i])
         .map(|(_, ratio)| *ratio)
         .sum();
-    let visible_ratio_total = 1.0 - hidden_ratio_sum;
     if visible_ratio_total <= 0.0 {
         return ratios;
     }
