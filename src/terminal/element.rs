@@ -33,6 +33,12 @@ pub struct TerminalContentSnapshot {
     pub lines: Vec<String>,
     pub cursor_line: i32,
     pub cursor_col: usize,
+    /// Display offset for scrollback - needed for correct cursor positioning
+    pub display_offset: usize,
+    /// The minimum line index from the content cells (used to offset cursor)
+    pub line_offset: i32,
+    /// Number of rows in the terminal viewport
+    pub viewport_rows: usize,
 }
 
 /// Custom element that properly sizes the terminal based on layout bounds
@@ -49,19 +55,33 @@ impl TerminalElement {
         }
     }
 
-    fn build_lines_from_content(content: &TerminalContent) -> Vec<String> {
+    /// Build lines from terminal content, returning (lines, min_line_index)
+    /// The min_line_index is needed to correctly position the cursor relative to content
+    fn build_lines_from_content(content: &TerminalContent) -> (Vec<String>, i32) {
+        if content.cells.is_empty() {
+            return (Vec::new(), 0);
+        }
+
+        // Find the minimum line index to use as our offset
+        let min_line = content
+            .cells
+            .iter()
+            .map(|c| c.point.line.0)
+            .min()
+            .unwrap_or(0);
+
         let mut lines: Vec<String> = Vec::new();
         let mut current_line = String::new();
-        let mut current_row = 0i32;
+        let mut current_row = min_line;
 
         for cell in &content.cells {
             if cell.point.line.0 != current_row {
                 if !current_line.is_empty() || current_row < cell.point.line.0 {
                     lines.push(std::mem::take(&mut current_line));
                 }
-                // Fill empty lines
+                // Fill empty lines (adjusted for min_line offset)
                 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-                while (lines.len() as i32) < cell.point.line.0 {
+                while (lines.len() as i32) < (cell.point.line.0 - min_line) {
                     lines.push(String::new());
                 }
                 current_row = cell.point.line.0;
@@ -72,7 +92,7 @@ impl TerminalElement {
             lines.push(current_line);
         }
 
-        lines
+        (lines, min_line)
     }
 }
 
@@ -203,11 +223,15 @@ impl Element for TerminalElement {
 
         // Get content snapshot
         let content = self.terminal.read(cx).last_content();
-        let lines = Self::build_lines_from_content(content);
+        let (lines, line_offset) = Self::build_lines_from_content(content);
+        let viewport_rows = dimensions.num_lines();
         let content_snapshot = TerminalContentSnapshot {
             lines,
             cursor_line: content.cursor.point.line.0,
             cursor_col: content.cursor.point.column.0,
+            display_offset: content.display_offset,
+            line_offset,
+            viewport_rows,
         };
 
         // Register hitbox for mouse events
@@ -281,21 +305,11 @@ impl Element for TerminalElement {
                 .ok();
         }
 
-        // Paint cursor (simple block cursor)
-        #[allow(clippy::cast_sign_loss)] // cursor_line is always non-negative when visible
-        let cursor_y =
-            bounds.origin.y + layout.line_height * layout.content.cursor_line.max(0) as usize;
-        let cursor_x = bounds.origin.x + layout.cell_width * layout.content.cursor_col;
-
-        if cursor_y >= bounds.origin.y && cursor_y < bounds.origin.y + bounds.size.height {
-            let cursor_bounds = Bounds {
-                origin: Point::new(cursor_x, cursor_y),
-                size: Size {
-                    width: layout.cell_width,
-                    height: layout.line_height,
-                },
-            };
-            window.paint_quad(gpui::fill(cursor_bounds, cursor_color));
-        }
+        // Note: Custom cursor rendering is disabled for now.
+        // The cursor positioning logic is complex and requires matching Zed's
+        // sophisticated handling of display_offset, scrollback, and content modes.
+        // For now, rely on the terminal content itself for cursor visualization.
+        // TODO: Implement proper cursor rendering following Zed's terminal_element.rs
+        let _ = cursor_color; // Suppress unused warning
     }
 }
