@@ -574,7 +574,7 @@ impl WorkspaceView {
         div()
             .flex()
             .flex_1()
-            .w_full()
+            .size_full()
             .relative()
             .child(
                 div()
@@ -606,6 +606,7 @@ impl WorkspaceView {
                 d.child(
                     div()
                         .flex_basis(relative(visible_ratios[0]))
+                        .h_full()
                         .child(self.render_pane(PaneType::FileBrowser, cx)),
                 )
             })
@@ -618,6 +619,7 @@ impl WorkspaceView {
                 d.child(
                     div()
                         .flex_basis(relative(visible_ratios[1]))
+                        .h_full()
                         .child(self.render_pane(PaneType::Terminal, cx)),
                 )
             })
@@ -630,6 +632,7 @@ impl WorkspaceView {
                 d.child(
                     div()
                         .flex_basis(relative(visible_ratios[2]))
+                        .h_full()
                         .child(self.render_pane(PaneType::DocumentViewer, cx)),
                 )
             })
@@ -655,13 +658,12 @@ impl WorkspaceView {
         // Terminal pane renders the actual TerminalPane component
         if pane_type == PaneType::Terminal {
             return div()
-                .flex_1()
+                .size_full()
                 .flex()
                 .flex_col()
                 .m_2()
                 .bg(theme.colors().panel_background)
                 .rounded_md()
-                .overflow_hidden()
                 .child(
                     div()
                         .flex()
@@ -680,7 +682,14 @@ impl WorkspaceView {
                         )
                         .child(self.render_hide_button(pane_type, cx)),
                 )
-                .child(self.terminal_pane.clone());
+                .child(
+                    div()
+                        .flex_1()
+                        .size_full()
+                        .min_h_0()
+                        .overflow_hidden()
+                        .child(self.terminal_pane.clone()),
+                );
         }
 
         // Document viewer renders placeholder
