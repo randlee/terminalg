@@ -90,7 +90,10 @@ impl TerminalElement {
     ///
     /// Returns Vec<(display_line, text)> where display_line is used for Y positioning.
     /// This ensures content and cursor use the same coordinate system.
-    fn build_lines_from_content(content: &TerminalContent, display_offset: usize) -> Vec<(i32, String)> {
+    fn build_lines_from_content(
+        content: &TerminalContent,
+        display_offset: usize,
+    ) -> Vec<(i32, String)> {
         if content.cells.is_empty() {
             return Vec::new();
         }
@@ -99,10 +102,7 @@ impl TerminalElement {
         let mut lines_map: BTreeMap<i32, Vec<char>> = BTreeMap::new();
 
         for cell in &content.cells {
-            lines_map
-                .entry(cell.point.line.0)
-                .or_default()
-                .push(cell.c);
+            lines_map.entry(cell.point.line.0).or_default().push(cell.c);
         }
 
         // Convert to Vec<(display_line, String)>
