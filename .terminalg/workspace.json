@@ -1,0 +1,29 @@
+{
+  "active_workspace_index": 0,
+  "workspaces": [
+    {
+      "id": "default",
+      "name": "Default",
+      "file_browser_visible": true,
+      "terminal_visible": true,
+      "document_viewer_visible": false,
+      "pane_ratios": [
+        0.43077695,
+        2.5692232,
+        1.0
+      ]
+    },
+    {
+      "id": "debug",
+      "name": "Debug",
+      "file_browser_visible": false,
+      "terminal_visible": true,
+      "document_viewer_visible": true,
+      "pane_ratios": [
+        1.0,
+        2.0,
+        1.0
+      ]
+    }
+  ]
+}

@@ -59,8 +59,9 @@ pub struct TerminalLayoutState {
 
 /// Snapshot of terminal content for rendering
 pub struct TerminalContentSnapshot {
-    /// Lines indexed by screen position (0, 1, 2...), not by raw line.0 values
-    pub lines: Vec<String>,
+    /// Lines with their display coordinates: (display_line, text)
+    /// display_line = line.0 + display_offset, used for Y positioning
+    pub lines: Vec<(i32, String)>,
     /// Cursor display line (adjusted with display_offset)
     pub display_cursor_line: i32,
     /// Cursor column
@@ -84,17 +85,12 @@ impl TerminalElement {
         }
     }
 
-    /// Build lines from terminal content using enumerated screen positions.
-    /// Following Zed's pattern from terminal_element.rs lines 1117-1124.
+    /// Build lines from terminal content with display coordinates.
+    /// Following Zed's coordinate transformation: display_line = line.0 + display_offset
     ///
-    /// This approach:
-    /// 1. Groups cells by their line.0 value
-    /// 2. Enumerates the groups to get screen positions (0, 1, 2...)
-    /// 3. Builds a Vec indexed by screen position
-    ///
-    /// This works for both positive lines AND negative scrollback lines because
-    /// we enumerate line groups rather than using raw line.0 values.
-    fn build_lines_from_content(content: &TerminalContent) -> Vec<String> {
+    /// Returns Vec<(display_line, text)> where display_line is used for Y positioning.
+    /// This ensures content and cursor use the same coordinate system.
+    fn build_lines_from_content(content: &TerminalContent, display_offset: usize) -> Vec<(i32, String)> {
         if content.cells.is_empty() {
             return Vec::new();
         }
@@ -109,12 +105,15 @@ impl TerminalElement {
                 .push(cell.c);
         }
 
-        // Convert to Vec<String> using enumerated positions (screen coordinates)
-        // The BTreeMap automatically sorts by line.0, so enumeration gives us
-        // screen positions: line 0 at index 0, line 1 at index 1, etc.
+        // Convert to Vec<(display_line, String)>
+        // Apply the same transformation used for cursor: line.0 + display_offset
         lines_map
-            .into_values()
-            .map(|chars| chars.into_iter().collect::<String>())
+            .into_iter()
+            .map(|(line_num, chars)| {
+                let display_line = line_num + display_offset as i32;
+                let text = chars.into_iter().collect::<String>();
+                (display_line, text)
+            })
             .collect()
     }
 
@@ -270,11 +269,29 @@ impl Element for TerminalElement {
 
         // Get content snapshot
         let content = self.terminal.read(cx).last_content();
-        let lines = Self::build_lines_from_content(content);
+        let lines = Self::build_lines_from_content(content, content.display_offset);
         let viewport_rows = dimensions.num_lines();
 
         // Create display cursor following Zed's pattern (line 1137)
         let display_cursor = DisplayCursor::from(content.cursor.point, content.display_offset);
+
+        // Debug: log cursor and content coordinates
+        let content_line_range = if lines.is_empty() {
+            (0, 0)
+        } else {
+            let min = lines.iter().map(|(l, _)| *l).min().unwrap_or(0);
+            let max = lines.iter().map(|(l, _)| *l).max().unwrap_or(0);
+            (min, max)
+        };
+        tracing::debug!(
+            cursor_raw_line = content.cursor.point.line.0,
+            display_offset = content.display_offset,
+            display_cursor_line = display_cursor.line(),
+            viewport_rows = viewport_rows,
+            content_min_line = content_line_range.0,
+            content_max_line = content_line_range.1,
+            "Cursor positioning debug"
+        );
 
         let content_snapshot = TerminalContentSnapshot {
             lines,
@@ -315,17 +332,19 @@ impl Element for TerminalElement {
         window.paint_quad(gpui::fill(bounds, layout.background_color));
 
         // Paint each line of terminal content using the terminal font
-        // Lines are already indexed by screen position (0, 1, 2...) from build_lines_from_content
-        for (line_idx, line_text) in layout.content.lines.iter().enumerate() {
+        // Lines have (display_line, text) - use display_line for Y positioning
+        // This ensures content and cursor use the same coordinate system
+        for (display_line, line_text) in layout.content.lines.iter() {
             if line_text.is_empty() {
                 continue;
             }
 
-            let y = bounds.origin.y + layout.line_height * line_idx;
-            if y > bounds.origin.y + bounds.size.height {
-                break; // Don't render lines outside viewport
+            // Skip lines outside viewport (display_line < 0 or >= num_lines)
+            if *display_line < 0 || *display_line >= layout.dimensions.num_lines() as i32 {
+                continue;
             }
 
+            let y = bounds.origin.y + layout.line_height * (*display_line as usize);
             let position = Point::new(bounds.origin.x, y);
 
             // Shape the line using window's text_system with the terminal font
@@ -355,25 +374,10 @@ impl Element for TerminalElement {
                 .ok();
         }
 
-        // Paint cursor following Zed's pattern
-        let display_cursor = DisplayCursor {
-            line: layout.content.display_cursor_line,
-            col: layout.content.cursor_col,
-        };
-
-        if let Some((cursor_position, cursor_width)) =
-            Self::shape_cursor(display_cursor, &layout.dimensions)
-        {
-            let cursor_bounds = Bounds {
-                origin: point(
-                    bounds.origin.x + cursor_position.x,
-                    bounds.origin.y + cursor_position.y,
-                ),
-                size: gpui::size(cursor_width, layout.line_height),
-            };
-
-            // Paint cursor as a filled rectangle
-            window.paint_quad(gpui::fill(cursor_bounds, cursor_color));
-        }
+        // DIAGNOSTIC: Disable custom cursor painting to test if Claude's native cursor works
+        // If the native cursor appears in the correct position, our custom paint is interfering
+        let _ = cursor_color; // Suppress unused warning
+        let _ = layout.content.display_cursor_line;
+        let _ = layout.content.cursor_col;
     }
 }
