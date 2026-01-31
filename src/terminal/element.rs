@@ -4,20 +4,49 @@
 //! during the prepaint phase, ensuring the PTY receives correct size information.
 
 use gpui::{
-    px, App, Bounds, Element, ElementId, Entity, Font, FontFeatures, FontStyle, GlobalElementId,
-    Hitbox, HitboxBehavior, Hsla, IntoElement, LayoutId, Pixels, Point, SharedString, Size, Style,
-    TextAlign, TextRun, Window,
+    point, px, App, Bounds, Element, ElementId, Entity, Font, FontFeatures, FontStyle,
+    GlobalElementId, Hitbox, HitboxBehavior, Hsla, IntoElement, LayoutId, Pixels, Point,
+    SharedString, Size, Style, TextAlign, TextRun, Window,
 };
 use settings::Settings;
+use std::collections::BTreeMap;
+use terminal::alacritty_terminal::index::Point as AlacPoint;
 use terminal::terminal_settings::TerminalSettings;
 use terminal::{Terminal, TerminalBounds, TerminalContent};
 use theme::{ActiveTheme, ThemeSettings};
+
+/// Helper struct for converting between Alacritty's cursor points and display cursor points.
+/// Following Zed's terminal_element.rs pattern (lines 59-79)
+#[derive(Debug, Clone, Copy)]
+struct DisplayCursor {
+    line: i32,
+    col: usize,
+}
+
+impl DisplayCursor {
+    /// Create a display cursor from an Alacritty cursor point and display offset.
+    /// The display_offset accounts for scrollback, transforming Alacritty's coordinate
+    /// system (where negative lines are scrollback) into screen coordinates (0, 1, 2...).
+    fn from(cursor_point: AlacPoint, display_offset: usize) -> Self {
+        Self {
+            line: cursor_point.line.0 + display_offset as i32,
+            col: cursor_point.column.0,
+        }
+    }
+
+    fn line(&self) -> i32 {
+        self.line
+    }
+
+    fn col(&self) -> usize {
+        self.col
+    }
+}
 
 /// Layout state computed during prepaint
 pub struct TerminalLayoutState {
     #[allow(dead_code)] // For future mouse event handling
     hitbox: Hitbox,
-    #[allow(dead_code)] // For debugging/future use
     dimensions: TerminalBounds,
     content: TerminalContentSnapshot,
     background_color: Hsla,
@@ -30,14 +59,14 @@ pub struct TerminalLayoutState {
 
 /// Snapshot of terminal content for rendering
 pub struct TerminalContentSnapshot {
+    /// Lines indexed by screen position (0, 1, 2...), not by raw line.0 values
     pub lines: Vec<String>,
-    pub cursor_line: i32,
+    /// Cursor display line (adjusted with display_offset)
+    pub display_cursor_line: i32,
+    /// Cursor column
     pub cursor_col: usize,
-    /// Display offset for scrollback - needed for correct cursor positioning
-    pub display_offset: usize,
-    /// The minimum line index from the content cells (used to offset cursor)
-    pub line_offset: i32,
     /// Number of rows in the terminal viewport
+    #[allow(dead_code)] // Used for debugging/future features
     pub viewport_rows: usize,
 }
 
@@ -55,44 +84,62 @@ impl TerminalElement {
         }
     }
 
-    /// Build lines from terminal content, returning (lines, min_line_index)
-    /// The min_line_index is needed to correctly position the cursor relative to content
-    fn build_lines_from_content(content: &TerminalContent) -> (Vec<String>, i32) {
+    /// Build lines from terminal content using enumerated screen positions.
+    /// Following Zed's pattern from terminal_element.rs lines 1117-1124.
+    ///
+    /// This approach:
+    /// 1. Groups cells by their line.0 value
+    /// 2. Enumerates the groups to get screen positions (0, 1, 2...)
+    /// 3. Builds a Vec indexed by screen position
+    ///
+    /// This works for both positive lines AND negative scrollback lines because
+    /// we enumerate line groups rather than using raw line.0 values.
+    fn build_lines_from_content(content: &TerminalContent) -> Vec<String> {
         if content.cells.is_empty() {
-            return (Vec::new(), 0);
+            return Vec::new();
         }
 
-        // Find the minimum line index to use as our offset
-        let min_line = content
-            .cells
-            .iter()
-            .map(|c| c.point.line.0)
-            .min()
-            .unwrap_or(0);
-
-        let mut lines: Vec<String> = Vec::new();
-        let mut current_line = String::new();
-        let mut current_row = min_line;
+        // Group cells by line, creating a sorted map of line.0 -> cells
+        let mut lines_map: BTreeMap<i32, Vec<char>> = BTreeMap::new();
 
         for cell in &content.cells {
-            if cell.point.line.0 != current_row {
-                if !current_line.is_empty() || current_row < cell.point.line.0 {
-                    lines.push(std::mem::take(&mut current_line));
-                }
-                // Fill empty lines (adjusted for min_line offset)
-                #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-                while (lines.len() as i32) < (cell.point.line.0 - min_line) {
-                    lines.push(String::new());
-                }
-                current_row = cell.point.line.0;
-            }
-            current_line.push(cell.c);
-        }
-        if !current_line.is_empty() {
-            lines.push(current_line);
+            lines_map
+                .entry(cell.point.line.0)
+                .or_default()
+                .push(cell.c);
         }
 
-        (lines, min_line)
+        // Convert to Vec<String> using enumerated positions (screen coordinates)
+        // The BTreeMap automatically sorts by line.0, so enumeration gives us
+        // screen positions: line 0 at index 0, line 1 at index 1, etc.
+        lines_map
+            .into_values()
+            .map(|chars| chars.into_iter().collect::<String>())
+            .collect()
+    }
+
+    /// Calculate cursor position and width, following Zed's shape_cursor pattern
+    /// from terminal_element.rs lines 504-528.
+    ///
+    /// Returns Some((position, width)) if cursor is visible, None otherwise.
+    fn shape_cursor(
+        cursor: DisplayCursor,
+        dimensions: &TerminalBounds,
+    ) -> Option<(Point<Pixels>, Pixels)> {
+        // Only render cursor if it's within the visible viewport
+        if cursor.line() >= 0 && cursor.line() < dimensions.num_lines() as i32 {
+            let cursor_position = point(
+                (cursor.col() as f32 * dimensions.cell_width()).floor(),
+                (cursor.line() as f32 * dimensions.line_height()).floor(),
+            );
+
+            // Use cell_width for cursor width
+            let cursor_width = dimensions.cell_width().ceil();
+
+            Some((cursor_position, cursor_width))
+        } else {
+            None
+        }
     }
 }
 
@@ -223,14 +270,16 @@ impl Element for TerminalElement {
 
         // Get content snapshot
         let content = self.terminal.read(cx).last_content();
-        let (lines, line_offset) = Self::build_lines_from_content(content);
+        let lines = Self::build_lines_from_content(content);
         let viewport_rows = dimensions.num_lines();
+
+        // Create display cursor following Zed's pattern (line 1137)
+        let display_cursor = DisplayCursor::from(content.cursor.point, content.display_offset);
+
         let content_snapshot = TerminalContentSnapshot {
             lines,
-            cursor_line: content.cursor.point.line.0,
-            cursor_col: content.cursor.point.column.0,
-            display_offset: content.display_offset,
-            line_offset,
+            display_cursor_line: display_cursor.line(),
+            cursor_col: display_cursor.col(),
             viewport_rows,
         };
 
@@ -266,6 +315,7 @@ impl Element for TerminalElement {
         window.paint_quad(gpui::fill(bounds, layout.background_color));
 
         // Paint each line of terminal content using the terminal font
+        // Lines are already indexed by screen position (0, 1, 2...) from build_lines_from_content
         for (line_idx, line_text) in layout.content.lines.iter().enumerate() {
             if line_text.is_empty() {
                 continue;
@@ -305,11 +355,25 @@ impl Element for TerminalElement {
                 .ok();
         }
 
-        // Note: Custom cursor rendering is disabled for now.
-        // The cursor positioning logic is complex and requires matching Zed's
-        // sophisticated handling of display_offset, scrollback, and content modes.
-        // For now, rely on the terminal content itself for cursor visualization.
-        // TODO: Implement proper cursor rendering following Zed's terminal_element.rs
-        let _ = cursor_color; // Suppress unused warning
+        // Paint cursor following Zed's pattern
+        let display_cursor = DisplayCursor {
+            line: layout.content.display_cursor_line,
+            col: layout.content.cursor_col,
+        };
+
+        if let Some((cursor_position, cursor_width)) =
+            Self::shape_cursor(display_cursor, &layout.dimensions)
+        {
+            let cursor_bounds = Bounds {
+                origin: point(
+                    bounds.origin.x + cursor_position.x,
+                    bounds.origin.y + cursor_position.y,
+                ),
+                size: gpui::size(cursor_width, layout.line_height),
+            };
+
+            // Paint cursor as a filled rectangle
+            window.paint_quad(gpui::fill(cursor_bounds, cursor_color));
+        }
     }
 }
