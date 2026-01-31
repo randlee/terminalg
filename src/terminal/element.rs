@@ -16,7 +16,7 @@ use terminal::{Terminal, TerminalBounds, TerminalContent};
 use theme::{ActiveTheme, ThemeSettings};
 
 /// Helper struct for converting between Alacritty's cursor points and display cursor points.
-/// Following Zed's terminal_element.rs pattern (lines 59-79)
+/// Following Zed's `terminal_element.rs` pattern (lines 59-79)
 #[derive(Debug, Clone, Copy)]
 struct DisplayCursor {
     line: i32,
@@ -25,20 +25,21 @@ struct DisplayCursor {
 
 impl DisplayCursor {
     /// Create a display cursor from an Alacritty cursor point and display offset.
-    /// The display_offset accounts for scrollback, transforming Alacritty's coordinate
+    /// The `display_offset` accounts for scrollback, transforming Alacritty's coordinate
     /// system (where negative lines are scrollback) into screen coordinates (0, 1, 2...).
-    fn from(cursor_point: AlacPoint, display_offset: usize) -> Self {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    const fn from(cursor_point: AlacPoint, display_offset: usize) -> Self {
         Self {
             line: cursor_point.line.0 + display_offset as i32,
             col: cursor_point.column.0,
         }
     }
 
-    fn line(&self) -> i32 {
+    const fn line(&self) -> i32 {
         self.line
     }
 
-    fn col(&self) -> usize {
+    const fn col(&self) -> usize {
         self.col
     }
 }
@@ -59,10 +60,10 @@ pub struct TerminalLayoutState {
 
 /// Snapshot of terminal content for rendering
 pub struct TerminalContentSnapshot {
-    /// Lines with their display coordinates: (display_line, text)
-    /// display_line = line.0 + display_offset, used for Y positioning
+    /// Lines with their display coordinates: (`display_line`, text)
+    /// `display_line` = `line.0` + `display_offset`, used for Y positioning
     pub lines: Vec<(i32, String)>,
-    /// Cursor display line (adjusted with display_offset)
+    /// Cursor display line (adjusted with `display_offset`)
     pub display_cursor_line: i32,
     /// Cursor column
     pub cursor_col: usize,
@@ -86,10 +87,11 @@ impl TerminalElement {
     }
 
     /// Build lines from terminal content with display coordinates.
-    /// Following Zed's coordinate transformation: display_line = line.0 + display_offset
+    /// Following Zed's coordinate transformation: `display_line` = `line.0` + `display_offset`
     ///
-    /// Returns Vec<(display_line, text)> where display_line is used for Y positioning.
+    /// Returns `Vec<(display_line, text)>` where `display_line` is used for Y positioning.
     /// This ensures content and cursor use the same coordinate system.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     fn build_lines_from_content(
         content: &TerminalContent,
         display_offset: usize,
@@ -117,16 +119,19 @@ impl TerminalElement {
             .collect()
     }
 
-    /// Calculate cursor position and width, following Zed's shape_cursor pattern
-    /// from terminal_element.rs lines 504-528.
+    /// Calculate cursor position and width, following Zed's `shape_cursor` pattern
+    /// from `terminal_element.rs` lines 504-528.
     ///
-    /// Returns Some((position, width)) if cursor is visible, None otherwise.
+    /// Returns `Some((position, width))` if cursor is visible, None otherwise.
+    #[allow(dead_code)] // Preserved for future cursor rendering
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_precision_loss)]
     fn shape_cursor(
         cursor: DisplayCursor,
         dimensions: &TerminalBounds,
     ) -> Option<(Point<Pixels>, Pixels)> {
         // Only render cursor if it's within the visible viewport
-        if cursor.line() >= 0 && cursor.line() < dimensions.num_lines() as i32 {
+        let num_lines_i32 = dimensions.num_lines() as i32;
+        if cursor.line() >= 0 && cursor.line() < num_lines_i32 {
             let cursor_position = point(
                 (cursor.col() as f32 * dimensions.cell_width()).floor(),
                 (cursor.line() as f32 * dimensions.line_height()).floor(),
@@ -316,6 +321,7 @@ impl Element for TerminalElement {
         }
     }
 
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_sign_loss)]
     fn paint(
         &mut self,
         _global_id: Option<&GlobalElementId>,
@@ -334,16 +340,18 @@ impl Element for TerminalElement {
         // Paint each line of terminal content using the terminal font
         // Lines have (display_line, text) - use display_line for Y positioning
         // This ensures content and cursor use the same coordinate system
-        for (display_line, line_text) in layout.content.lines.iter() {
+        for (display_line, line_text) in &layout.content.lines {
             if line_text.is_empty() {
                 continue;
             }
 
             // Skip lines outside viewport (display_line < 0 or >= num_lines)
-            if *display_line < 0 || *display_line >= layout.dimensions.num_lines() as i32 {
+            let num_lines_i32 = layout.dimensions.num_lines() as i32;
+            if *display_line < 0 || *display_line >= num_lines_i32 {
                 continue;
             }
 
+            // display_line is guaranteed >= 0 here, safe to convert to usize
             let y = bounds.origin.y + layout.line_height * (*display_line as usize);
             let position = Point::new(bounds.origin.x, y);
 
