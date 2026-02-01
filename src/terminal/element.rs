@@ -10,10 +10,24 @@ use gpui::{
 };
 use settings::Settings;
 use std::collections::BTreeMap;
+use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
 use terminal::alacritty_terminal::index::Point as AlacPoint;
 use terminal::terminal_settings::TerminalSettings;
 use terminal::{Terminal, TerminalBounds, TerminalContent};
 use theme::{ActiveTheme, ThemeSettings};
+
+static LOGGED_TERMINAL_METRICS: AtomicBool = AtomicBool::new(false);
+static LAST_LAYOUT_METRICS: Mutex<Option<LayoutMetrics>> = Mutex::new(None);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LayoutMetrics {
+    bounds_width_bits: u32,
+    bounds_height_bits: u32,
+    cell_width_bits: u32,
+    line_height_bits: u32,
+    num_lines: usize,
+    num_cols: usize,
+}
 
 /// Helper struct for converting between Alacritty's cursor points and display cursor points.
 /// Following Zed's terminal_element.rs pattern (lines 59-79)
@@ -268,12 +282,40 @@ impl Element for TerminalElement {
         });
 
         // Get content snapshot
-        let content = self.terminal.read(cx).last_content();
-        let lines = Self::build_lines_from_content(content, content.display_offset);
-        let viewport_rows = dimensions.num_lines();
+        let (lines, viewport_rows, display_offset, cursor_point) = {
+            let content = self.terminal.read(cx).last_content();
+            (
+                Self::build_lines_from_content(content, content.display_offset),
+                dimensions.num_lines(),
+                content.display_offset,
+                content.cursor.point,
+            )
+        };
+        if std::env::var("TERMINALG_DEBUG_RESIZE").is_ok() {
+            let metrics = LayoutMetrics {
+                bounds_width_bits: f32::from(clamped_bounds.size.width).to_bits(),
+                bounds_height_bits: f32::from(clamped_bounds.size.height).to_bits(),
+                cell_width_bits: f32::from(cell_width).to_bits(),
+                line_height_bits: f32::from(line_height).to_bits(),
+                num_lines: viewport_rows,
+                num_cols: dimensions.num_columns(),
+            };
+            let mut last = LAST_LAYOUT_METRICS.lock().unwrap();
+            if last.as_ref() != Some(&metrics) {
+                *last = Some(metrics);
+                tracing::info!(
+                    bounds_size = ?clamped_bounds.size,
+                    cell_width = f32::from(cell_width),
+                    line_height = f32::from(line_height),
+                    num_lines = viewport_rows,
+                    num_cols = dimensions.num_columns(),
+                    "Terminal layout metrics (changed)"
+                );
+            }
+        }
 
         // Create display cursor following Zed's pattern (line 1137)
-        let display_cursor = DisplayCursor::from(content.cursor.point, content.display_offset);
+        let display_cursor = DisplayCursor::from(cursor_point, display_offset);
 
         // Debug: log cursor and content coordinates
         let content_line_range = if lines.is_empty() {
@@ -284,14 +326,28 @@ impl Element for TerminalElement {
             (min, max)
         };
         tracing::debug!(
-            cursor_raw_line = content.cursor.point.line.0,
-            display_offset = content.display_offset,
+            cursor_raw_line = cursor_point.line.0,
+            display_offset = display_offset,
             display_cursor_line = display_cursor.line(),
             viewport_rows = viewport_rows,
             content_min_line = content_line_range.0,
             content_max_line = content_line_range.1,
             "Cursor positioning debug"
         );
+        if std::env::var("TERMINALG_DEBUG_TERMINAL").is_ok()
+            && !LOGGED_TERMINAL_METRICS.swap(true, Ordering::Relaxed)
+        {
+            tracing::info!(
+                bounds_size = ?bounds.size,
+                clamped_size = ?clamped_bounds.size,
+                cell_width = f32::from(cell_width),
+                line_height = f32::from(line_height),
+                num_lines = viewport_rows,
+                num_cols = dimensions.num_columns(),
+                display_offset = display_offset,
+                "Terminal layout metrics"
+            );
+        }
 
         let content_snapshot = TerminalContentSnapshot {
             lines,
@@ -334,50 +390,124 @@ impl Element for TerminalElement {
         // Paint each line of terminal content using the terminal font
         // Lines have (display_line, text) - use display_line for Y positioning
         // This ensures content and cursor use the same coordinate system
-        for (display_line, line_text) in layout.content.lines.iter() {
-            if line_text.is_empty() {
-                continue;
+        if std::env::var("TERMINALG_DEBUG_CELL_RENDER").is_ok() {
+            let use_offset = std::env::var("TERMINALG_DEBUG_CELL_RENDER")
+                .ok()
+                .map(|value| value == "offset")
+                .unwrap_or(false);
+            let (cells, display_offset) = {
+                let content = self.terminal.read(cx).last_content();
+                let cells = content
+                    .cells
+                    .iter()
+                    .map(|cell| (cell.point.line.0, cell.point.column.0, cell.c))
+                    .collect::<Vec<_>>();
+                (cells, content.display_offset)
+            };
+            for (line, col, ch) in cells {
+                if ch == ' ' {
+                    continue;
+                }
+                let mut line = line;
+                if use_offset {
+                    line += display_offset as i32;
+                }
+                if line < 0 || line >= layout.dimensions.num_lines() as i32 {
+                    continue;
+                }
+                let position = Point::new(
+                    bounds.origin.x + layout.cell_width * col,
+                    bounds.origin.y + layout.line_height * (line as usize),
+                );
+                let shaped = window.text_system().shape_line(
+                    SharedString::from(ch.to_string()),
+                    layout.font_size,
+                    &[TextRun {
+                        len: ch.len_utf8(),
+                        font: layout.font.clone(),
+                        color: layout.foreground_color,
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    }],
+                    Some(layout.cell_width),
+                );
+                shaped
+                    .paint(
+                        position,
+                        layout.line_height,
+                        TextAlign::Left,
+                        None,
+                        window,
+                        cx,
+                    )
+                    .ok();
             }
+        } else {
+            for (display_line, line_text) in layout.content.lines.iter() {
+                if line_text.is_empty() {
+                    continue;
+                }
 
-            // Skip lines outside viewport (display_line < 0 or >= num_lines)
-            if *display_line < 0 || *display_line >= layout.dimensions.num_lines() as i32 {
-                continue;
+                // Skip lines outside viewport (display_line < 0 or >= num_lines)
+                if *display_line < 0 || *display_line >= layout.dimensions.num_lines() as i32 {
+                    continue;
+                }
+
+                let y = bounds.origin.y + layout.line_height * (*display_line as usize);
+                let position = Point::new(bounds.origin.x, y);
+
+                // Shape the line using window's text_system with the terminal font
+                // Use force_width to ensure each glyph is positioned at glyph_index * cell_width
+                let shaped_line = window.text_system().shape_line(
+                    SharedString::from(line_text.clone()),
+                    layout.font_size,
+                    &[TextRun {
+                        len: line_text.len(),
+                        font: layout.font.clone(),
+                        color: layout.foreground_color,
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    }],
+                    Some(layout.cell_width),
+                );
+                shaped_line
+                    .paint(
+                        position,
+                        layout.line_height,
+                        TextAlign::Left,
+                        None,
+                        window,
+                        cx,
+                    )
+                    .ok();
             }
-
-            let y = bounds.origin.y + layout.line_height * (*display_line as usize);
-            let position = Point::new(bounds.origin.x, y);
-
-            // Shape the line using window's text_system with the terminal font
-            // Use force_width to ensure each glyph is positioned at glyph_index * cell_width
-            let shaped_line = window.text_system().shape_line(
-                SharedString::from(line_text.clone()),
-                layout.font_size,
-                &[TextRun {
-                    len: line_text.len(),
-                    font: layout.font.clone(),
-                    color: layout.foreground_color,
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                }],
-                Some(layout.cell_width),
-            );
-            shaped_line
-                .paint(
-                    position,
-                    layout.line_height,
-                    TextAlign::Left,
-                    None,
-                    window,
-                    cx,
-                )
-                .ok();
         }
 
         // DIAGNOSTIC: Disable custom cursor painting to test if Claude's native cursor works
         // If the native cursor appears in the correct position, our custom paint is interfering
-        let _ = cursor_color; // Suppress unused warning
-        let _ = layout.content.display_cursor_line;
-        let _ = layout.content.cursor_col;
+        if std::env::var("TERMINALG_DEBUG_CURSOR").is_ok() {
+            let display_cursor = DisplayCursor {
+                line: layout.content.display_cursor_line,
+                col: layout.content.cursor_col,
+            };
+            if let Some((cursor_position, cursor_width)) =
+                Self::shape_cursor(display_cursor, &layout.dimensions)
+            {
+                let cursor_bounds = Bounds {
+                    origin: bounds.origin + cursor_position,
+                    size: Size {
+                        width: cursor_width,
+                        height: layout.line_height,
+                    },
+                };
+                window.paint_quad(gpui::fill(cursor_bounds, cursor_color));
+            }
+        } else {
+            let _ = cursor_color; // Suppress unused warning
+            let _ = layout.content.display_cursor_line;
+            let _ = layout.content.cursor_col;
+        }
     }
 }
