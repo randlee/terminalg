@@ -10,7 +10,10 @@ use gpui::{
 };
 use settings::Settings;
 use std::collections::BTreeMap;
-use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 use terminal::alacritty_terminal::index::Point as AlacPoint;
 use terminal::terminal_settings::TerminalSettings;
 use terminal::{Terminal, TerminalBounds, TerminalContent};
