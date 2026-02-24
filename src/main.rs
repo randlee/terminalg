@@ -1,15 +1,23 @@
 //! `TerminalG` - GPU-accelerated terminal with integrated artifact viewing
 
+// Legacy modules (deprecated - kept for reference during migration)
+#[allow(dead_code)]
 mod settings;
-mod terminal;
+#[allow(dead_code)]
 mod theme;
+
+// Adapter modules for Zed integration
+mod settings_adapter;
+mod theme_adapter;
+
+// Active modules
+mod file_browser;
+mod terminal;
 mod ui;
 mod viewer;
 
 use anyhow::Result;
 use gpui::{prelude::*, px, size, App, Application, Bounds, WindowBounds, WindowOptions};
-use settings::SettingsStore;
-use theme::Theme;
 use tracing_subscriber::EnvFilter;
 use ui::WorkspaceView;
 
@@ -21,20 +29,17 @@ fn main() -> Result<()> {
 
     tracing::info!("TerminalG starting...");
 
-    // Load settings
-    let settings_store = SettingsStore::new()?;
-    tracing::info!("Settings loaded from {:?}", settings_store.settings_path());
-
-    // Load theme
-    let theme_name = &settings_store.settings().ui.theme;
-    let theme = Theme::by_name(theme_name).unwrap_or_else(Theme::dark);
-    tracing::info!("Loaded theme: {}", theme.name);
-
     // Initialize GPUI application
     Application::new().run(move |cx: &mut App| {
-        // Store settings and theme in global state
-        cx.set_global(settings_store);
-        cx.set_global(theme);
+        // Initialize Zed's settings system first
+        ::settings::init(cx);
+        tracing::info!("Zed SettingsStore initialized");
+
+        // Register TerminalG settings adapter
+        settings_adapter::init(cx);
+
+        // Initialize Zed's theme system
+        theme_adapter::init(cx);
 
         // Quit application when all windows are closed
         cx.on_window_closed(|cx| {

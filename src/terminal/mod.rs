@@ -1,16 +1,12 @@
-//! Terminal emulation component
+//! Terminal emulation components
+//!
+//! This module provides the terminal pane and tab management for `TerminalG`,
+//! wrapping Zed's terminal crate for PTY management and rendering.
 
-// TODO: Implement terminal component
-// Phase 2: Terminal Integration
+mod element;
+mod pane;
+mod tab;
 
-#[allow(dead_code)] // Placeholder for Phase 2 implementation
-pub struct Terminal {
-    // TODO: fields
-}
-
-impl Terminal {
-    #[allow(dead_code)] // Placeholder for Phase 2 implementation
-    pub const fn new() -> Self {
-        Self {}
-    }
-}
+pub use pane::{TerminalPane, TerminalPaneEvent};
+#[allow(unused_imports)] // Exported for future use
+pub use tab::TerminalTab;

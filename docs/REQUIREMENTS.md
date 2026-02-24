@@ -1,7 +1,7 @@
 # TerminalG Requirements
 
 **Version:** 1.0
-**Last Updated:** 2025-01-24
+**Last Updated:** 2026-01-24
 
 ---
 
@@ -98,6 +98,8 @@ Existing tools force workflows into constrained patterns:
 - [ ] Workspace-local: `.terminalg/workspace.json` or `.terminalg/workspace-<name>.json` in project repos
 - [ ] Workspace root is the folder containing `.terminalg/`
 - [ ] Loading/switching workspaces sets the process working directory to the workspace root
+- [ ] Terminal tabs remain active across workspace switches (runtime-only sessions)
+- [ ] Document tabs may be lazily reloaded for memory recovery (non-critical)
 - [ ] First-time workspace: Default to file browser + terminal (same root folder)
 - [ ] App settings track all available workspaces and their config paths for this machine
 
@@ -227,6 +229,7 @@ Existing tools force workflows into constrained patterns:
 - Multiple terminals with tabs at bottom
 - Terminal settings applied correctly
 - URL recognition and clicking works
+- Terminal tabs persist while app is running (no session restore on restart)
 
 ### 7.3 Phase 3 Complete When (File Browser):
 - File/folder browser pane functional
@@ -254,6 +257,7 @@ Existing tools force workflows into constrained patterns:
 ### 7.6 MVP Success (Phases 1-4):
 - Three co-equal panes (file browser, terminal, document viewer)
 - Workspace tabs switch full context
+- Workspaces lazy-load: only active workspace initializes; others load on first switch
 - Zed terminal fully functional (all features + URL clicking)
 - File browser navigates projects
 - Markdown renders inline
