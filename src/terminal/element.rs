@@ -4,20 +4,50 @@
 //! during the prepaint phase, ensuring the PTY receives correct size information.
 
 use gpui::{
-    px, App, Bounds, Element, ElementId, Entity, Font, FontFeatures, FontStyle, GlobalElementId,
-    Hitbox, HitboxBehavior, Hsla, IntoElement, LayoutId, Pixels, Point, SharedString, Size, Style,
-    TextAlign, TextRun, Window,
+    point, px, App, Bounds, Element, ElementId, Entity, Font, FontFeatures, FontStyle,
+    GlobalElementId, Hitbox, HitboxBehavior, Hsla, IntoElement, LayoutId, Pixels, Point,
+    SharedString, Size, Style, TextAlign, TextRun, Window,
 };
 use settings::Settings;
+use std::collections::BTreeMap;
+use terminal::alacritty_terminal::index::Point as AlacPoint;
 use terminal::terminal_settings::TerminalSettings;
 use terminal::{Terminal, TerminalBounds, TerminalContent};
 use theme::{ActiveTheme, ThemeSettings};
+
+/// Helper struct for converting between Alacritty's cursor points and display cursor points.
+/// Following Zed's `terminal_element.rs` pattern (lines 59-79)
+#[derive(Debug, Clone, Copy)]
+struct DisplayCursor {
+    line: i32,
+    col: usize,
+}
+
+impl DisplayCursor {
+    /// Create a display cursor from an Alacritty cursor point and display offset.
+    /// The `display_offset` accounts for scrollback, transforming Alacritty's coordinate
+    /// system (where negative lines are scrollback) into screen coordinates (0, 1, 2...).
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    const fn from(cursor_point: AlacPoint, display_offset: usize) -> Self {
+        Self {
+            line: cursor_point.line.0 + display_offset as i32,
+            col: cursor_point.column.0,
+        }
+    }
+
+    const fn line(&self) -> i32 {
+        self.line
+    }
+
+    const fn col(&self) -> usize {
+        self.col
+    }
+}
 
 /// Layout state computed during prepaint
 pub struct TerminalLayoutState {
     #[allow(dead_code)] // For future mouse event handling
     hitbox: Hitbox,
-    #[allow(dead_code)] // For debugging/future use
     dimensions: TerminalBounds,
     content: TerminalContentSnapshot,
     background_color: Hsla,
@@ -30,9 +60,16 @@ pub struct TerminalLayoutState {
 
 /// Snapshot of terminal content for rendering
 pub struct TerminalContentSnapshot {
-    pub lines: Vec<String>,
-    pub cursor_line: i32,
+    /// Lines with their display coordinates: (`display_line`, text)
+    /// `display_line` = `line.0` + `display_offset`, used for Y positioning
+    pub lines: Vec<(i32, String)>,
+    /// Cursor display line (adjusted with `display_offset`)
+    pub display_cursor_line: i32,
+    /// Cursor column
     pub cursor_col: usize,
+    /// Number of rows in the terminal viewport
+    #[allow(dead_code)] // Used for debugging/future features
+    pub viewport_rows: usize,
 }
 
 /// Custom element that properly sizes the terminal based on layout bounds
@@ -49,30 +86,64 @@ impl TerminalElement {
         }
     }
 
-    fn build_lines_from_content(content: &TerminalContent) -> Vec<String> {
-        let mut lines: Vec<String> = Vec::new();
-        let mut current_line = String::new();
-        let mut current_row = 0i32;
+    /// Build lines from terminal content with display coordinates.
+    /// Following Zed's coordinate transformation: `display_line` = `line.0` + `display_offset`
+    ///
+    /// Returns `Vec<(display_line, text)>` where `display_line` is used for Y positioning.
+    /// This ensures content and cursor use the same coordinate system.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    fn build_lines_from_content(
+        content: &TerminalContent,
+        display_offset: usize,
+    ) -> Vec<(i32, String)> {
+        if content.cells.is_empty() {
+            return Vec::new();
+        }
+
+        // Group cells by line, creating a sorted map of line.0 -> cells
+        let mut lines_map: BTreeMap<i32, Vec<char>> = BTreeMap::new();
 
         for cell in &content.cells {
-            if cell.point.line.0 != current_row {
-                if !current_line.is_empty() || current_row < cell.point.line.0 {
-                    lines.push(std::mem::take(&mut current_line));
-                }
-                // Fill empty lines
-                #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-                while (lines.len() as i32) < cell.point.line.0 {
-                    lines.push(String::new());
-                }
-                current_row = cell.point.line.0;
-            }
-            current_line.push(cell.c);
-        }
-        if !current_line.is_empty() {
-            lines.push(current_line);
+            lines_map.entry(cell.point.line.0).or_default().push(cell.c);
         }
 
-        lines
+        // Convert to Vec<(display_line, String)>
+        // Apply the same transformation used for cursor: line.0 + display_offset
+        lines_map
+            .into_iter()
+            .map(|(line_num, chars)| {
+                let display_line = line_num + display_offset as i32;
+                let text = chars.into_iter().collect::<String>();
+                (display_line, text)
+            })
+            .collect()
+    }
+
+    /// Calculate cursor position and width, following Zed's `shape_cursor` pattern
+    /// from `terminal_element.rs` lines 504-528.
+    ///
+    /// Returns `Some((position, width))` if cursor is visible, None otherwise.
+    #[allow(dead_code)] // Preserved for future cursor rendering
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_precision_loss)]
+    fn shape_cursor(
+        cursor: DisplayCursor,
+        dimensions: &TerminalBounds,
+    ) -> Option<(Point<Pixels>, Pixels)> {
+        // Only render cursor if it's within the visible viewport
+        let num_lines_i32 = dimensions.num_lines() as i32;
+        if cursor.line() >= 0 && cursor.line() < num_lines_i32 {
+            let cursor_position = point(
+                (cursor.col() as f32 * dimensions.cell_width()).floor(),
+                (cursor.line() as f32 * dimensions.line_height()).floor(),
+            );
+
+            // Use cell_width for cursor width
+            let cursor_width = dimensions.cell_width().ceil();
+
+            Some((cursor_position, cursor_width))
+        } else {
+            None
+        }
     }
 }
 
@@ -203,11 +274,35 @@ impl Element for TerminalElement {
 
         // Get content snapshot
         let content = self.terminal.read(cx).last_content();
-        let lines = Self::build_lines_from_content(content);
+        let lines = Self::build_lines_from_content(content, content.display_offset);
+        let viewport_rows = dimensions.num_lines();
+
+        // Create display cursor following Zed's pattern (line 1137)
+        let display_cursor = DisplayCursor::from(content.cursor.point, content.display_offset);
+
+        // Debug: log cursor and content coordinates
+        let content_line_range = if lines.is_empty() {
+            (0, 0)
+        } else {
+            let min = lines.iter().map(|(l, _)| *l).min().unwrap_or(0);
+            let max = lines.iter().map(|(l, _)| *l).max().unwrap_or(0);
+            (min, max)
+        };
+        tracing::debug!(
+            cursor_raw_line = content.cursor.point.line.0,
+            display_offset = content.display_offset,
+            display_cursor_line = display_cursor.line(),
+            viewport_rows = viewport_rows,
+            content_min_line = content_line_range.0,
+            content_max_line = content_line_range.1,
+            "Cursor positioning debug"
+        );
+
         let content_snapshot = TerminalContentSnapshot {
             lines,
-            cursor_line: content.cursor.point.line.0,
-            cursor_col: content.cursor.point.column.0,
+            display_cursor_line: display_cursor.line(),
+            cursor_col: display_cursor.col(),
+            viewport_rows,
         };
 
         // Register hitbox for mouse events
@@ -226,6 +321,7 @@ impl Element for TerminalElement {
         }
     }
 
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_sign_loss)]
     fn paint(
         &mut self,
         _global_id: Option<&GlobalElementId>,
@@ -242,16 +338,21 @@ impl Element for TerminalElement {
         window.paint_quad(gpui::fill(bounds, layout.background_color));
 
         // Paint each line of terminal content using the terminal font
-        for (line_idx, line_text) in layout.content.lines.iter().enumerate() {
+        // Lines have (display_line, text) - use display_line for Y positioning
+        // This ensures content and cursor use the same coordinate system
+        for (display_line, line_text) in &layout.content.lines {
             if line_text.is_empty() {
                 continue;
             }
 
-            let y = bounds.origin.y + layout.line_height * line_idx;
-            if y > bounds.origin.y + bounds.size.height {
-                break; // Don't render lines outside viewport
+            // Skip lines outside viewport (display_line < 0 or >= num_lines)
+            let num_lines_i32 = layout.dimensions.num_lines() as i32;
+            if *display_line < 0 || *display_line >= num_lines_i32 {
+                continue;
             }
 
+            // display_line is guaranteed >= 0 here, safe to convert to usize
+            let y = bounds.origin.y + layout.line_height * (*display_line as usize);
             let position = Point::new(bounds.origin.x, y);
 
             // Shape the line using window's text_system with the terminal font
@@ -281,21 +382,10 @@ impl Element for TerminalElement {
                 .ok();
         }
 
-        // Paint cursor (simple block cursor)
-        #[allow(clippy::cast_sign_loss)] // cursor_line is always non-negative when visible
-        let cursor_y =
-            bounds.origin.y + layout.line_height * layout.content.cursor_line.max(0) as usize;
-        let cursor_x = bounds.origin.x + layout.cell_width * layout.content.cursor_col;
-
-        if cursor_y >= bounds.origin.y && cursor_y < bounds.origin.y + bounds.size.height {
-            let cursor_bounds = Bounds {
-                origin: Point::new(cursor_x, cursor_y),
-                size: Size {
-                    width: layout.cell_width,
-                    height: layout.line_height,
-                },
-            };
-            window.paint_quad(gpui::fill(cursor_bounds, cursor_color));
-        }
+        // DIAGNOSTIC: Disable custom cursor painting to test if Claude's native cursor works
+        // If the native cursor appears in the correct position, our custom paint is interfering
+        let _ = cursor_color; // Suppress unused warning
+        let _ = layout.content.display_cursor_line;
+        let _ = layout.content.cursor_col;
     }
 }
